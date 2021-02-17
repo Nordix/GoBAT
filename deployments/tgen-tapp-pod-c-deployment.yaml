@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tgen-tapp-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tgen-tapp
+  template:
+    metadata:
+      labels:
+        app: tgen-tapp
+        app-instance: tgen-tapp-deployment
+      annotations:
+        k8s.v1.cni.cncf.io/networks: '[
+            {
+              "name": "test-net",
+              "ips": ["10.10.10.3/24"]
+            }
+        ]'
+    spec:
+      serviceAccount: tgen-tapp-sa
+      containers:
+      - name: tgen-tapp-pod-container-c
+        image: tgen-tapp:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - tgenapp
+        args:
+        - -readbufsize=1000
+        env:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: tgen-tapp
+  name: tgen-tapp-deployment
+spec:
+  clusterIP: None  # headless service
+  selector:
+    app-instance: tgen-tapp-deployment
+  ports:
+    - port: 8890
+      targetPort: 8890
+      name: udp
+      protocol: UDP

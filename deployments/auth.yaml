@@ -1,0 +1,37 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: default
+  name: tgen-tapp-sa
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tgen-tapp-sa-secret
+  namespace: default
+  annotations:
+    kubernetes.io/service-account.name: tgen-tapp-sa
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tgen-tapp
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["list", "get", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tgen-tapp-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tgen-tapp
+subjects:
+- kind: ServiceAccount
+  name: tgen-tapp-sa
+  namespace: default
