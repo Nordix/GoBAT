@@ -19,10 +19,13 @@ package tgc
 import (
 	"errors"
 	"fmt"
+	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/Nordix/GoBAT/pkg/tgen"
 	"github.com/Nordix/GoBAT/pkg/util"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -155,12 +158,15 @@ func (tg *podTGC) createNetBatTgenClients() {
 				p.Err = util.Error{Code: util.TrafficNotStarted, Description: fmt.Sprintf("%v", err)}
 				return
 			}
+			logrus.Infof("pair:%v  client: %v", *p, client)
 			p.PrometheusRegister()
+			logrus.Infof("registered the pair with prometheus: %v", *p)
 			go p.ClientConnection.HandleTimeouts(tg.config)
 			go p.ClientConnection.SocketRead(tg.socketReadBufferSize)
 			go p.ClientConnection.StartPackets(tg.config)
 		}((&tg.netBatPairs[index]))
 	}
+	go tg.registerPromHandler()
 }
 
 func (tg *podTGC) deleteNetBatTgenClients() {
@@ -177,6 +183,14 @@ func (tg *podTGC) deleteNetBatTgenClients() {
 	}
 	tg.netBatPairs = nil
 	tg.config = nil
+}
+
+func (tg *podTGC) registerPromHandler() {
+	logrus.Infof("calling http handle")
+	http.Handle("/metrics", promhttp.Handler())
+	logrus.Infof("calling listen and serve")
+	http.ListenAndServe(":"+strconv.Itoa(util.PromPort), nil)
+	logrus.Infof("after listen and server")
 }
 
 func getAvgDropRateBin(avgDropRate int) string {

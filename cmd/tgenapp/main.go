@@ -20,18 +20,15 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/Nordix/GoBAT/pkg/tapp"
 	"github.com/Nordix/GoBAT/pkg/tgc"
 	"github.com/Nordix/GoBAT/pkg/util"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -55,7 +52,6 @@ var (
 func main() {
 
 	readBufferSize := flag.Int("readbufsize", 1000, "socket read buffer size")
-	cpuprofile := flag.String("cpuprofile", defaultCPUProf, "tgen cpu profiling file")
 	flag.Parse()
 
 	sigs := make(chan os.Signal, 1)
@@ -66,8 +62,6 @@ func main() {
 	if err := initializeLog(LogFile); err != nil {
 		panic(err)
 	}
-
-	logrus.Errorf("cpu profiling path : %s", *cpuprofile)
 
 	goMaxProcs := os.Getenv("GOMAXPROCS")
 
@@ -94,8 +88,6 @@ func main() {
 		logrus.Errorf("server connection creation failed: err %v", err)
 		return
 	}
-
-	registerPromHandler()
 
 	// creates the in-cluster config
 	clientSet := getClient()
@@ -193,9 +185,4 @@ func initializeLog(logFile string) error {
 	mw := io.MultiWriter(os.Stdout, f)
 	logrus.SetOutput(mw)
 	return nil
-}
-
-func registerPromHandler() {
-	http.Handle("/metrics", promhttp.Handler())
-	http.ListenAndServe(":"+strconv.Itoa(util.PromPort), nil)
 }

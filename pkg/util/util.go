@@ -67,10 +67,10 @@ type Metrics struct {
 
 // PrometheusMetrics prometheus metrics for the pair
 type PrometheusMetrics struct {
-	PacketSent     prometheus.Gauge
-	PacketReceived prometheus.Gauge
-	PacketDropped  prometheus.Gauge
-	RoundTrip      prometheus.Gauge
+	PacketSent     prometheus.Counter
+	PacketReceived prometheus.Counter
+	PacketDropped  prometheus.Counter
+	RoundTrip      prometheus.Counter
 }
 
 // BatPair represents the BAT traffic to be run between two entities
@@ -174,11 +174,18 @@ func (bp *BatPair) GetErrorDescription() string {
 
 // PrometheusRegister register the BAT pair with Prometheus for metrics export
 func (bp *BatPair) PrometheusRegister() {
-	label := bp.SourceIP + ":" + bp.DestinationIP + ":" + bp.TrafficType + ":" + bp.TrafficCase
-	bp.PromMetrics = PrometheusMetrics{PacketSent: NewGauge(packetSent, "total packet sent", label),
-		PacketReceived: NewGauge(packetReceived, "total packet received", label),
-		PacketDropped:  NewGauge(packetDropped, "total packet dropped", label),
-		RoundTrip:      NewGauge(roundTripTime, "total round trip time", label)}
+	labelMap := make(map[string]string)
+	labelMap["source"] = bp.SourceIP
+	labelMap["destination"] = bp.DestinationIP
+	bp.PromMetrics = PrometheusMetrics{}
+	bp.PromMetrics.PacketSent = NewCounter(bp.TrafficType, bp.TrafficCase, packetSent, "total packet sent", labelMap)
+	prometheus.MustRegister(bp.PromMetrics.PacketSent)
+	bp.PromMetrics.PacketReceived = NewCounter(bp.TrafficType, bp.TrafficCase, packetReceived, "total packet received", labelMap)
+	prometheus.MustRegister(bp.PromMetrics.PacketReceived)
+	bp.PromMetrics.PacketDropped = NewCounter(bp.TrafficType, bp.TrafficCase, packetDropped, "total packet dropped", labelMap)
+	prometheus.MustRegister(bp.PromMetrics.PacketDropped)
+	bp.PromMetrics.RoundTrip = NewCounter(bp.TrafficType, bp.TrafficCase, roundTripTime, "total round trip time", labelMap)
+	prometheus.MustRegister(bp.PromMetrics.RoundTrip)
 }
 
 // PrometheusUnRegister unregister the BAT pair from Prometheus
@@ -228,13 +235,14 @@ func MicroSecToDuration(msec int) time.Duration {
 	return time.Duration(msec) * time.Microsecond
 }
 
-// NewGauge creates a new gauge and registers with prometheus
-func NewGauge(name, help, label string) prometheus.Gauge {
-	gauge := prometheus.NewGauge(prometheus.GaugeOpts{
+// NewCounter creates a new counter and registers with prometheus
+func NewCounter(namespace, subsystem, name, help string, labelMap map[string]string) prometheus.Counter {
+	counter := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace:   namespace,
+		Subsystem:   subsystem,
 		Name:        name,
 		Help:        help,
-		ConstLabels: prometheus.Labels{label: label},
+		ConstLabels: labelMap,
 	})
-	prometheus.MustRegister(gauge)
-	return gauge
+	return counter
 }
