@@ -38,39 +38,10 @@ const (
 	TrafficNotStarted = 1
 )
 
-const (
-	// packetSent represents total packets sent
-	packetSent = "packets_sent"
-	// packetReceived represents total packets received
-	packetReceived = "packets_received"
-	// packetDropped represents total packets received
-	packetDropped = "packets_dropped"
-	// roundTripTime represent total round trip time
-	roundTripTime = "total_round_trip_time"
-)
-
 // Error error associated with pair
 type Error struct {
 	Code        int
 	Description string
-}
-
-// Metrics traffic metrics for each connection
-// TODO: to be removed once prometheus metrics started working
-type Metrics struct {
-	Duration       int64
-	PacketSent     int
-	PacketReceived int
-	PacketDropped  int
-	RoundTrip      int64
-}
-
-// PrometheusMetrics prometheus metrics for the pair
-type PrometheusMetrics struct {
-	PacketSent     prometheus.Counter
-	PacketReceived prometheus.Counter
-	PacketDropped  prometheus.Counter
-	RoundTrip      prometheus.Counter
 }
 
 // BatPair represents the BAT traffic to be run between two entities
@@ -80,8 +51,6 @@ type BatPair struct {
 	TrafficCase        string
 	TrafficProfile     string
 	TrafficType        string
-	TotalMetrics       Metrics
-	PromMetrics        PrometheusMetrics
 	PendingRequestsMap map[int64]int64
 	StartTime          int64
 	ClientConnection   ClientImpl
@@ -115,85 +84,6 @@ type ClientImpl interface {
 	SocketRead(bufSize int)
 	HandleTimeouts(Config)
 	StartPackets(Config)
-}
-
-// BatPairStats gettters to retrieve BAT pair in-time statistics
-type BatPairStats interface {
-	PrometheusRegister()
-	PrometheusUnRegister()
-	GetSourceIP() string
-	GetDestinationIP() string
-	GetTrafficCase() string
-	GetTrafficProfile() string
-	GetTrafficType() string
-	GetTotalMetrics() *Metrics
-	GetErrorCode() int
-	GetErrorDescription() string
-}
-
-// GetSourceIP source ip address of the BAT pair
-func (bp *BatPair) GetSourceIP() string {
-	return bp.SourceIP
-}
-
-// GetDestinationIP destination ip address of the BAT pair
-func (bp *BatPair) GetDestinationIP() string {
-	return bp.DestinationIP
-}
-
-// GetTrafficCase traffic case of the BAT pair
-func (bp *BatPair) GetTrafficCase() string {
-	return bp.TrafficCase
-}
-
-// GetTrafficProfile traffic profile of the BAT pair
-func (bp *BatPair) GetTrafficProfile() string {
-	return bp.TrafficProfile
-}
-
-// GetTrafficType traffic type of the BAT pair
-func (bp *BatPair) GetTrafficType() string {
-	return bp.TrafficType
-}
-
-// GetTotalMetrics in time available metrics of the BAT pair
-func (bp *BatPair) GetTotalMetrics() *Metrics {
-	bp.TotalMetrics.Duration = GetTimestampMicroSec() - bp.StartTime
-	return &bp.TotalMetrics
-}
-
-// GetErrorCode returns error code (if available) for the BAT pair
-func (bp *BatPair) GetErrorCode() int {
-	return bp.Err.Code
-}
-
-// GetErrorDescription returns err description (if available) for the BAT pair
-func (bp *BatPair) GetErrorDescription() string {
-	return bp.Err.Description
-}
-
-// PrometheusRegister register the BAT pair with Prometheus for metrics export
-func (bp *BatPair) PrometheusRegister() {
-	labelMap := make(map[string]string)
-	labelMap["source"] = bp.SourceIP
-	labelMap["destination"] = bp.DestinationIP
-	bp.PromMetrics = PrometheusMetrics{}
-	bp.PromMetrics.PacketSent = NewCounter(bp.TrafficType, bp.TrafficCase, packetSent, "total packet sent", labelMap)
-	prometheus.MustRegister(bp.PromMetrics.PacketSent)
-	bp.PromMetrics.PacketReceived = NewCounter(bp.TrafficType, bp.TrafficCase, packetReceived, "total packet received", labelMap)
-	prometheus.MustRegister(bp.PromMetrics.PacketReceived)
-	bp.PromMetrics.PacketDropped = NewCounter(bp.TrafficType, bp.TrafficCase, packetDropped, "total packet dropped", labelMap)
-	prometheus.MustRegister(bp.PromMetrics.PacketDropped)
-	bp.PromMetrics.RoundTrip = NewCounter(bp.TrafficType, bp.TrafficCase, roundTripTime, "total round trip time", labelMap)
-	prometheus.MustRegister(bp.PromMetrics.RoundTrip)
-}
-
-// PrometheusUnRegister unregister the BAT pair from Prometheus
-func (bp *BatPair) PrometheusUnRegister() {
-	prometheus.Unregister(bp.PromMetrics.PacketSent)
-	prometheus.Unregister(bp.PromMetrics.PacketReceived)
-	prometheus.Unregister(bp.PromMetrics.PacketDropped)
-	prometheus.Unregister(bp.PromMetrics.RoundTrip)
 }
 
 // NewMessage creates a new message

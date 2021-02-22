@@ -23,8 +23,20 @@ import (
 	"time"
 
 	"github.com/Nordix/GoBAT/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack"
+)
+
+const (
+	// packetSent represents total packets sent
+	packetSentStr = "packets_sent"
+	// packetReceived represents total packets received
+	packetReceivedStr = "packets_received"
+	// packetDropped represents total packets received
+	packetDroppedStr = "packets_dropped"
+	// roundTripTime represent total round trip time
+	roundTripTimeStr = "total_round_trip_time"
 )
 
 // UDPClient udp client implementation
@@ -36,6 +48,10 @@ type UDPClient struct {
 	mutex           *sync.Mutex
 	msgHeaderLength int
 	stop            bool
+	packetSent      prometheus.Counter
+	packetReceived  prometheus.Counter
+	packetDropped   prometheus.Counter
+	roundTrip       prometheus.Counter
 }
 
 // NewUDPClient creates a new udp client
@@ -63,6 +79,17 @@ func (c *UDPClient) SetupConnection() error {
 		return err
 	}
 	c.connection = conn
+	labelMap := make(map[string]string)
+	labelMap["source"] = c.pair.SourceIP
+	labelMap["destination"] = c.pair.DestinationIP
+	c.packetSent = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, packetSentStr, "total packet sent", labelMap)
+	prometheus.MustRegister(c.packetSent)
+	c.packetReceived = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, packetReceivedStr, "total packet received", labelMap)
+	prometheus.MustRegister(c.packetReceived)
+	c.packetDropped = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, packetDroppedStr, "total packet dropped", labelMap)
+	prometheus.MustRegister(c.packetDropped)
+	c.roundTrip = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, roundTripTimeStr, "total round trip time", labelMap)
+	prometheus.MustRegister(c.roundTrip)
 	return nil
 }
 
@@ -101,10 +128,8 @@ func (c *UDPClient) SocketRead(bufSize int) {
 				continue
 			}
 			//logrus.Infof("%s-%s: processing message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.SourceIP, c.pair.DestinationIP, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
-			c.pair.TotalMetrics.RoundTrip += (util.GetTimestampMicroSec() - msg.SendTimeStamp)
-			c.pair.PromMetrics.RoundTrip.Add(float64(util.GetTimestampMicroSec() - msg.SendTimeStamp))
-			c.pair.TotalMetrics.PacketReceived++
-			c.pair.PromMetrics.PacketReceived.Inc()
+			c.roundTrip.Add(float64(util.GetTimestampMicroSec() - msg.SendTimeStamp))
+			c.packetReceived.Inc()
 			delete(c.pair.PendingRequestsMap, msg.SequenceNumber)
 			c.mutex.Unlock()
 		}
@@ -134,8 +159,7 @@ func (c *UDPClient) HandleTimeouts(config util.Config) {
 				now := util.GetTimestampMicroSec()
 				if (now - sendTimeStamp) > packetTimeoutinMicros {
 					//logrus.Infof("%s-%s: seq: %d, packet timed out: now %d- sendtime %d- timeout %d", c.pair.SourceIP, c.pair.DestinationIP, seq, now, sendTimeStamp, packetTimeoutinMicros)
-					c.pair.TotalMetrics.PacketDropped++
-					c.pair.PromMetrics.PacketDropped.Inc()
+					c.packetDropped.Inc()
 					delete(c.pair.PendingRequestsMap, seq)
 					c.mutex.Unlock()
 					seq++
@@ -202,8 +226,7 @@ func (c *UDPClient) StartPackets(config util.Config) {
 				}
 				continue
 			}
-			c.pair.TotalMetrics.PacketSent++
-			c.pair.PromMetrics.PacketSent.Inc()
+			c.packetSent.Inc()
 			c.mutex.Lock()
 			c.pair.PendingRequestsMap[c.packetSequence] = baseMsg.SendTimeStamp
 			c.mutex.Unlock()
@@ -224,5 +247,9 @@ func (c *UDPClient) TearDownConnection() {
 	c.stop = true
 	c.connection.Close()
 	c.isStopped.Wait()
+	prometheus.Unregister(c.packetSent)
+	prometheus.Unregister(c.packetReceived)
+	prometheus.Unregister(c.packetDropped)
+	prometheus.Unregister(c.roundTrip)
 	logrus.Infof("client connection %s-%s is stopped", c.connection.LocalAddr().String(), c.connection.RemoteAddr().String())
 }

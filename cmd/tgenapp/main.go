@@ -18,17 +18,18 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"syscall"
-	"time"
 
 	"github.com/Nordix/GoBAT/pkg/tapp"
 	"github.com/Nordix/GoBAT/pkg/tgc"
 	"github.com/Nordix/GoBAT/pkg/util"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -40,8 +41,7 @@ const (
 	// NodeName node name env variable
 	NodeName = "NODE_NAME"
 	// LogFile log file location
-	LogFile        = "/var/log/tgc.log"
-	defaultCPUProf = "/var/log/tgc.prof"
+	LogFile = "/var/log/tgc.log"
 )
 
 var (
@@ -89,6 +89,8 @@ func main() {
 		return
 	}
 
+	go registerPromHandler()
+
 	// creates the in-cluster config
 	clientSet := getClient()
 
@@ -96,30 +98,10 @@ func main() {
 	tgController := tgc.NewPodTGController(clientSet, podName, nodeName, readBufferSize, stopper)
 	tgController.StartTGC()
 
-	statsCollectTicker := time.NewTicker(5 * time.Second)
-	statsCollectStop := make(chan bool, 1)
-
-	go func() {
-		for {
-			select {
-			case <-statsCollectStop:
-				return
-			case <-statsCollectTicker.C:
-				netBatStats, err := tgController.GetAvailableNetBatStats()
-				if err != nil {
-					continue
-				}
-				logStats(netBatStats)
-			}
-		}
-	}()
-
 	go func() {
 		sig := <-sigs
 		logrus.Infof("received the signal %v", sig)
-		statsCollectTicker.Stop()
 		done <- true
-		statsCollectStop <- true
 	}()
 	// Capture signals to cleanup before exiting
 	<-done
@@ -129,6 +111,11 @@ func main() {
 
 	logrus.Infof("tgen tapp is stopped")
 
+}
+
+func registerPromHandler() {
+	http.Handle("/metrics", promhttp.Handler())
+	http.ListenAndServe(":"+strconv.Itoa(util.PromPort), nil)
 }
 
 func startTappServer(port int, protocol string, readBufSize *int) (util.ServerImpl, error) {
@@ -158,23 +145,6 @@ func getClient() kubernetes.Interface {
 	}
 
 	return clientset
-}
-
-func logStats(pairStats []util.BatPairStats) {
-	var statsString string
-	for _, pairStat := range pairStats {
-		metric := pairStat.GetTotalMetrics()
-		errCode := pairStat.GetErrorCode()
-		if errCode == 0 {
-			statsString = fmt.Sprintf("%s-%s-%s-%s-%s-%s=> %s-%d-%d-%d-%s", podName, nodeName, pairStat.GetSourceIP(),
-				pairStat.GetDestinationIP(), pairStat.GetTrafficCase(), pairStat.GetTrafficType(),
-				util.MicroSecToDuration(int(metric.Duration)).Round(1*time.Second), metric.PacketSent, metric.PacketReceived, metric.PacketDropped, util.MicroSecToDuration(int(metric.RoundTrip)).Round(1*time.Microsecond))
-		} else {
-			statsString = fmt.Sprintf("%s-%s-%s-%s-%s-%s=> %d-%s", podName, nodeName, pairStat.GetSourceIP(),
-				pairStat.GetDestinationIP(), pairStat.GetTrafficCase(), pairStat.GetTrafficType(), errCode, pairStat.GetErrorDescription())
-		}
-		logrus.Infof(statsString)
-	}
 }
 
 func initializeLog(logFile string) error {

@@ -17,35 +17,17 @@
 package tgc
 
 import (
-	"errors"
 	"fmt"
-	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/Nordix/GoBAT/pkg/tgen"
 	"github.com/Nordix/GoBAT/pkg/util"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
-)
-
-const (
-	defaultUDPSendRate      = 500
-	defaultUDPPacketSize    = 1000
-	defaultUDPPacketTimeout = 5
-	ppm                     = 1000000
-	dropRate100pPPM         = "D = 100%"
-	dropRate1pTo100pPPM     = "D < 100%"
-	dropRate1000To1pPPM     = "D < 1%"
-	dropRate100To1000PPM    = "D < 1000ppm"
-	dropRate10To100PPM      = "D < 100ppm"
-	dropRate0To10PPM        = "D < 10ppm"
-	dropRate0PPM            = "D = 0ppm"
 )
 
 // podTGC pod traffic controller
@@ -62,7 +44,6 @@ type podTGC struct {
 // TGController traffic gen controller
 type TGController interface {
 	StartTGC()
-	GetAvailableNetBatStats() ([]util.BatPairStats, error)
 	StopTGC()
 }
 
@@ -121,18 +102,6 @@ func (tg *podTGC) StartTGC() {
 	go informer.Run(tg.stopper)
 }
 
-// GetAvailableNetBatStats retrieves BatPairStats for each pair
-func (tg *podTGC) GetAvailableNetBatStats() ([]util.BatPairStats, error) {
-	if tg.netBatPairs == nil {
-		return nil, errors.New("no stats available")
-	}
-	stats := []util.BatPairStats{}
-	for index := range tg.netBatPairs {
-		stats = append(stats, &tg.netBatPairs[index])
-	}
-	return stats, nil
-}
-
 // StopTGC stop listening for config map changes and stop tgc for every pair
 func (tg *podTGC) StopTGC() {
 	close(tg.stopper)
@@ -144,7 +113,6 @@ func (tg *podTGC) createNetBatTgenClients() {
 		go func(p *util.BatPair) {
 			p.PendingRequestsMap = make(map[int64]int64)
 			p.StartTime = util.GetTimestampMicroSec()
-			p.TotalMetrics = util.Metrics{}
 			client, err := tgen.NewClient(p)
 			if err != nil {
 				logrus.Errorf("error creating client for pair %v: %v", p, err)
@@ -158,15 +126,11 @@ func (tg *podTGC) createNetBatTgenClients() {
 				p.Err = util.Error{Code: util.TrafficNotStarted, Description: fmt.Sprintf("%v", err)}
 				return
 			}
-			logrus.Infof("pair:%v  client: %v", *p, client)
-			p.PrometheusRegister()
-			logrus.Infof("registered the pair with prometheus: %v", *p)
 			go p.ClientConnection.HandleTimeouts(tg.config)
 			go p.ClientConnection.SocketRead(tg.socketReadBufferSize)
 			go p.ClientConnection.StartPackets(tg.config)
 		}((&tg.netBatPairs[index]))
 	}
-	go tg.registerPromHandler()
 }
 
 func (tg *podTGC) deleteNetBatTgenClients() {
@@ -178,39 +142,10 @@ func (tg *podTGC) deleteNetBatTgenClients() {
 		if pair.ClientConnection == nil || pair.Err.Code == util.TrafficNotStarted {
 			continue
 		}
-		pair.PrometheusUnRegister()
 		pair.ClientConnection.TearDownConnection()
 	}
 	tg.netBatPairs = nil
 	tg.config = nil
-}
-
-func (tg *podTGC) registerPromHandler() {
-	logrus.Infof("calling http handle")
-	http.Handle("/metrics", promhttp.Handler())
-	logrus.Infof("calling listen and serve")
-	http.ListenAndServe(":"+strconv.Itoa(util.PromPort), nil)
-	logrus.Infof("after listen and server")
-}
-
-func getAvgDropRateBin(avgDropRate int) string {
-	var binStr string
-	if avgDropRate <= 0 {
-		binStr = dropRate0PPM
-	} else if avgDropRate > 0 && avgDropRate < 10 {
-		binStr = dropRate0To10PPM
-	} else if avgDropRate >= 10 && avgDropRate < 100 {
-		binStr = dropRate10To100PPM
-	} else if avgDropRate >= 100 && avgDropRate < 1000 {
-		binStr = dropRate100To1000PPM
-	} else if avgDropRate >= 1000 && avgDropRate < 10000 {
-		binStr = dropRate1000To1pPPM
-	} else if avgDropRate >= 10000 && avgDropRate < 999900 {
-		binStr = dropRate1pTo100pPPM
-	} else {
-		binStr = dropRate100pPPM
-	}
-	return binStr
 }
 
 func handleAddNetBatConfigMap(cm *v1.ConfigMap, podName string) (util.Config, []util.BatPair, error) {

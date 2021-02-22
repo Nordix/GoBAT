@@ -12,13 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM golang:1.13-alpine as builder
+FROM golang:1.15-alpine as builder
 ADD . /usr/src/tgenapp
 RUN apk add --update --virtual build-dependencies build-base linux-headers && \
     cd /usr/src/tgenapp && \
     make
 
-FROM golang:1.13-alpine
+FROM golang:1.15-alpine
+RUN apk add --update \
+    curl \
+    && rm -rf /var/cache/apk/*
 COPY --from=builder /usr/src/tgenapp/bin/tgenapp /usr/bin/
 
 CMD ["tgenapp"]
