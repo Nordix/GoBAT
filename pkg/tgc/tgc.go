@@ -37,6 +37,7 @@ type podTGC struct {
 	config               util.Config
 	podName              string
 	nodeName             string
+	namespace            string
 	netBatPairs          []util.BatPair
 	stopper              chan struct{}
 }
@@ -48,13 +49,13 @@ type TGController interface {
 }
 
 // NewPodTGController creates traffic gen controller for the pod
-func NewPodTGController(clientSet kubernetes.Interface, podName, nodeName string, readBufferSize *int, stopper chan struct{}) TGController {
-	return &podTGC{clientSet: clientSet, socketReadBufferSize: *readBufferSize, podName: podName, nodeName: nodeName, stopper: stopper}
+func NewPodTGController(clientSet kubernetes.Interface, podName, nodeName, namespace string, readBufferSize *int, stopper chan struct{}) TGController {
+	return &podTGC{clientSet: clientSet, socketReadBufferSize: *readBufferSize, podName: podName, nodeName: nodeName, namespace: namespace, stopper: stopper}
 }
 
 // StartTGC listen for relavant config maps and create pairing
 func (tg *podTGC) StartTGC() {
-	factory := informers.NewFilteredSharedInformerFactory(tg.clientSet, 0, "", func(o *metav1.ListOptions) {
+	factory := informers.NewFilteredSharedInformerFactory(tg.clientSet, 0, tg.namespace, func(o *metav1.ListOptions) {
 	})
 	informer := factory.Core().V1().ConfigMaps().Informer()
 

@@ -40,13 +40,10 @@ const (
 	PodName = "POD_NAME"
 	// NodeName node name env variable
 	NodeName = "NODE_NAME"
+	// Namespace pod namespace env variable
+	Namespace = "NAMESPACE"
 	// LogFile log file location
 	LogFile = "/var/log/tgc.log"
-)
-
-var (
-	podName  string
-	nodeName string
 )
 
 func main() {
@@ -71,15 +68,21 @@ func main() {
 
 	var exists bool
 
-	podName, exists = os.LookupEnv(PodName)
+	podName, exists := os.LookupEnv(PodName)
 	if !exists {
 		logrus.Errorf("no pod name set in env variable")
 		return
 	}
 
-	nodeName, exists = os.LookupEnv(NodeName)
+	nodeName, exists := os.LookupEnv(NodeName)
 	if !exists {
 		logrus.Errorf("no node name set in env variable")
+		return
+	}
+
+	namespace, exists := os.LookupEnv(Namespace)
+	if !exists {
+		logrus.Errorf("no namespace set in env variable")
 		return
 	}
 
@@ -95,7 +98,7 @@ func main() {
 	clientSet := getClient()
 
 	stopper := make(chan struct{})
-	tgController := tgc.NewPodTGController(clientSet, podName, nodeName, readBufferSize, stopper)
+	tgController := tgc.NewPodTGController(clientSet, podName, nodeName, namespace, readBufferSize, stopper)
 	tgController.StartTGC()
 
 	go func() {
