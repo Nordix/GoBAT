@@ -48,6 +48,7 @@ type UDPClient struct {
 	mutex           *sync.Mutex
 	msgHeaderLength int
 	stop            bool
+	promRegistry    *prometheus.Registry
 	packetSent      prometheus.Counter
 	packetReceived  prometheus.Counter
 	packetDropped   prometheus.Counter
@@ -55,7 +56,7 @@ type UDPClient struct {
 }
 
 // NewUDPClient creates a new udp client
-func NewUDPClient(p *util.BatPair) util.ClientImpl {
+func NewUDPClient(p *util.BatPair, reg *prometheus.Registry) util.ClientImpl {
 	udpClient := &UDPClient{pair: p, mutex: &sync.Mutex{}, stop: false}
 	udpClient.isStopped.Add(3)
 	msgHeaderLength, err := util.GetMessageHeaderLength()
@@ -63,6 +64,7 @@ func NewUDPClient(p *util.BatPair) util.ClientImpl {
 		panic(err)
 	}
 	udpClient.msgHeaderLength = msgHeaderLength
+	udpClient.promRegistry = reg
 	return udpClient
 }
 
@@ -83,13 +85,13 @@ func (c *UDPClient) SetupConnection() error {
 	labelMap["source"] = c.pair.SourceIP
 	labelMap["destination"] = c.pair.DestinationIP
 	c.packetSent = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, packetSentStr, "total packet sent", labelMap)
-	prometheus.MustRegister(c.packetSent)
+	c.promRegistry.MustRegister(c.packetSent)
 	c.packetReceived = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, packetReceivedStr, "total packet received", labelMap)
-	prometheus.MustRegister(c.packetReceived)
+	c.promRegistry.MustRegister(c.packetReceived)
 	c.packetDropped = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, packetDroppedStr, "total packet dropped", labelMap)
-	prometheus.MustRegister(c.packetDropped)
+	c.promRegistry.MustRegister(c.packetDropped)
 	c.roundTrip = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, roundTripTimeStr, "total round trip time", labelMap)
-	prometheus.MustRegister(c.roundTrip)
+	c.promRegistry.MustRegister(c.roundTrip)
 	return nil
 }
 
@@ -247,9 +249,9 @@ func (c *UDPClient) TearDownConnection() {
 	c.stop = true
 	c.connection.Close()
 	c.isStopped.Wait()
-	prometheus.Unregister(c.packetSent)
-	prometheus.Unregister(c.packetReceived)
-	prometheus.Unregister(c.packetDropped)
-	prometheus.Unregister(c.roundTrip)
+	c.promRegistry.Unregister(c.packetSent)
+	c.promRegistry.Unregister(c.packetReceived)
+	c.promRegistry.Unregister(c.packetDropped)
+	c.promRegistry.Unregister(c.roundTrip)
 	logrus.Infof("client connection %s-%s is stopped", c.connection.LocalAddr().String(), c.connection.RemoteAddr().String())
 }

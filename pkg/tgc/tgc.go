@@ -22,6 +22,7 @@ import (
 
 	"github.com/Nordix/GoBAT/pkg/tgen"
 	"github.com/Nordix/GoBAT/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,6 +41,7 @@ type podTGC struct {
 	namespace            string
 	netBatPairs          []util.BatPair
 	stopper              chan struct{}
+	promRegistry         *prometheus.Registry
 }
 
 // TGController traffic gen controller
@@ -49,8 +51,8 @@ type TGController interface {
 }
 
 // NewPodTGController creates traffic gen controller for the pod
-func NewPodTGController(clientSet kubernetes.Interface, podName, nodeName, namespace string, readBufferSize *int, stopper chan struct{}) TGController {
-	return &podTGC{clientSet: clientSet, socketReadBufferSize: *readBufferSize, podName: podName, nodeName: nodeName, namespace: namespace, stopper: stopper}
+func NewPodTGController(clientSet kubernetes.Interface, podName, nodeName, namespace string, readBufferSize *int, stopper chan struct{}, reg *prometheus.Registry) TGController {
+	return &podTGC{clientSet: clientSet, socketReadBufferSize: *readBufferSize, podName: podName, nodeName: nodeName, namespace: namespace, stopper: stopper, promRegistry: reg}
 }
 
 // StartTGC listen for relavant config maps and create pairing
@@ -114,7 +116,7 @@ func (tg *podTGC) createNetBatTgenClients() {
 		go func(p *util.BatPair) {
 			p.PendingRequestsMap = make(map[int64]int64)
 			p.StartTime = util.GetTimestampMicroSec()
-			client, err := tgen.NewClient(p)
+			client, err := tgen.NewClient(p, tg.promRegistry)
 			if err != nil {
 				logrus.Errorf("error creating client for pair %v: %v", p, err)
 				p.Err = util.Error{Code: util.TrafficNotStarted, Description: fmt.Sprintf("%v", err)}

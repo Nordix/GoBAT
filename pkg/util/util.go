@@ -17,9 +17,12 @@
 package util
 
 import (
+	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/vmihailenco/msgpack"
 )
 
@@ -135,4 +138,11 @@ func NewCounter(namespace, subsystem, name, help string, labelMap map[string]str
 		ConstLabels: labelMap,
 	})
 	return counter
+}
+
+// RegisterPromHandler register prometheus http handler
+func RegisterPromHandler(reg *prometheus.Registry) {
+	handler := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
+	http.Handle("/metrics", handler)
+	http.ListenAndServe(":"+strconv.Itoa(PromPort), nil)
 }

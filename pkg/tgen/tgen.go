@@ -21,13 +21,14 @@ import (
 	"fmt"
 
 	"github.com/Nordix/GoBAT/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // NewClient get the client implementation for the given protocol
-func NewClient(p *util.BatPair) (util.ClientImpl, error) {
+func NewClient(p *util.BatPair, reg *prometheus.Registry) (util.ClientImpl, error) {
 	switch p.TrafficType {
 	case util.ProtocolUDP:
-		return NewUDPClient(p), nil
+		return NewUDPClient(p, reg), nil
 	case util.ProtocolHTTP:
 		return nil, errors.New("http client not supported")
 	default:

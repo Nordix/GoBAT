@@ -19,17 +19,15 @@ package main
 import (
 	"flag"
 	"io"
-	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"syscall"
 
 	"github.com/Nordix/GoBAT/pkg/tapp"
 	"github.com/Nordix/GoBAT/pkg/tgc"
 	"github.com/Nordix/GoBAT/pkg/util"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -92,13 +90,14 @@ func main() {
 		return
 	}
 
-	go registerPromHandler()
+	reg := prometheus.NewRegistry()
+	go util.RegisterPromHandler(reg)
 
 	// creates the in-cluster config
 	clientSet := getClient()
 
 	stopper := make(chan struct{})
-	tgController := tgc.NewPodTGController(clientSet, podName, nodeName, namespace, readBufferSize, stopper)
+	tgController := tgc.NewPodTGController(clientSet, podName, nodeName, namespace, readBufferSize, stopper, reg)
 	tgController.StartTGC()
 
 	go func() {
@@ -114,11 +113,6 @@ func main() {
 
 	logrus.Infof("tgen tapp is stopped")
 
-}
-
-func registerPromHandler() {
-	http.Handle("/metrics", promhttp.Handler())
-	http.ListenAndServe(":"+strconv.Itoa(util.PromPort), nil)
 }
 
 func startTappServer(port int, protocol string, readBufSize *int) (util.ServerImpl, error) {
