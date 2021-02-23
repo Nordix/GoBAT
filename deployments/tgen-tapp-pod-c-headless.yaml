@@ -14,17 +14,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: tgen-tapp-deployment
+  name: tgen-tapp-c-deployment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: tgen-tapp
+      app: tgen-tapp-c
   template:
     metadata:
       labels:
-        app: tgen-tapp
-        app-instance: tgen-tapp-deployment
+        app: tgen-tapp-c
+        app-instance: tgen-tapp-c-deployment
       annotations:
         k8s.v1.cni.cncf.io/networks: '[
             {
@@ -60,12 +60,12 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: tgen-tapp
-  name: tgen-tapp-deployment
+    app: tgen-tapp-c
+  name: tgen-tapp-c-headless-service
 spec:
   clusterIP: None  # headless service
   selector:
-    app-instance: tgen-tapp-deployment
+    app-instance: tgen-tapp-c-deployment
   ports:
     - port: 8890
       targetPort: 8890

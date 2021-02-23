@@ -24,8 +24,9 @@ data:
     tgen-tapp-pod-a, 10.10.10.1, 10.10.10.2, ovsnet, secondary, udp
     tgen-tapp-pod-a, 10.10.10.1, 10.10.10.3, ovsnet, secondary, udp
     tgen-tapp-pod-a, 10.10.10.1, 10.10.10.2, ovsnet, secondary, http
-    tgen-tapp-pod-a, 192.168.167.139, 192.168.167.141, pod, primary, udp
-    tgen-tapp-pod-a, 192.168.167.139, tgen-tapp-deployment, headless, primary, udp
+    tgen-tapp-pod-a, 192.168.167.136, 192.168.167.139, pod, primary, udp
+    tgen-tapp-pod-a, 192.168.167.136, tgen-tapp-c-headless-service, headless, primary, udp
+    tgen-tapp-pod-a, 192.168.167.136, tgen-tapp-d-clusterip-service, clusterip, primary, udp
     tgen-tapp-pod-b, 10.10.10.2, 10.10.10.1, ovsnet, secondary, udp
     tgen-tapp-pod-b, 10.10.10.2, 10.10.10.3, ovsnet, secondary, udp
     tgen-tapp-pod-b, 10.10.10.2, 10.10.10.1, ovsnet, secondary, http
