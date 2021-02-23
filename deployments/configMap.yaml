@@ -21,14 +21,14 @@ data:
   udp-packet-timeout: "5"
   http_send_rate: "100"
   pairing: |
-    tgen-tapp-pod-a, 10.10.10.1, 10.10.10.2, ovs-network, secondary, udp
-    tgen-tapp-pod-a, 10.10.10.1, 10.10.10.3, ovs-network, secondary, udp
-    tgen-tapp-pod-a, 10.10.10.1, 10.10.10.2, ovs-network, secondary, http
+    tgen-tapp-pod-a, 10.10.10.1, 10.10.10.2, ovsnet, secondary, udp
+    tgen-tapp-pod-a, 10.10.10.1, 10.10.10.3, ovsnet, secondary, udp
+    tgen-tapp-pod-a, 10.10.10.1, 10.10.10.2, ovsnet, secondary, http
     tgen-tapp-pod-a, 192.168.167.139, 192.168.167.141, pod, primary, udp
     tgen-tapp-pod-a, 192.168.167.139, tgen-tapp-deployment, headless, primary, udp
-    tgen-tapp-pod-b, 10.10.10.2, 10.10.10.1, ovs-network, secondary, udp
-    tgen-tapp-pod-b, 10.10.10.2, 10.10.10.3, ovs-network, secondary, udp
-    tgen-tapp-pod-b, 10.10.10.2, 10.10.10.1, ovs-network, secondary, http
+    tgen-tapp-pod-b, 10.10.10.2, 10.10.10.1, ovsnet, secondary, udp
+    tgen-tapp-pod-b, 10.10.10.2, 10.10.10.3, ovsnet, secondary, udp
+    tgen-tapp-pod-b, 10.10.10.2, 10.10.10.1, ovsnet, secondary, http
   http-query: "path/to/the/page"
   html-page: |
     This is the content of the static HTML page to be delivered
