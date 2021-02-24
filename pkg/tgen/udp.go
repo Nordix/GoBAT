@@ -80,6 +80,8 @@ func (c *UDPClient) SetupConnection() error {
 	if err != nil {
 		return err
 	}
+	// set read buffer size into 512KB
+	conn.SetReadBuffer(512 * 1024)
 	c.connection = conn
 	labelMap := make(map[string]string)
 	labelMap["source"] = c.pair.SourceIP

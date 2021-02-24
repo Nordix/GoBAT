@@ -58,6 +58,8 @@ func (s *UDPServer) SetupServerConnection() error {
 	if err != nil {
 		return err
 	}
+	// set read buffer size into 512KB
+	connection.SetReadBuffer(512 * 1024)
 	logrus.Infof("listening on: %s\n", connection.LocalAddr())
 	s.connection = connection
 	return nil
