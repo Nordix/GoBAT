@@ -221,8 +221,14 @@ func (c *UDPClient) StartPackets(config util.Config) {
 				continue
 			}
 			copy(baseByteArr, newMsgByteArr)
+			c.mutex.Lock()
+			c.pair.PendingRequestsMap[c.packetSequence] = baseMsg.SendTimeStamp
+			c.mutex.Unlock()
 			_, err = c.connection.Write(baseByteArr)
 			if err != nil {
+				c.mutex.Lock()
+				delete(c.pair.PendingRequestsMap, c.packetSequence)
+				c.mutex.Unlock()
 				logrus.Errorf("error in writing message %v to client connection: err %v", baseMsg, err)
 				if c.stop == true {
 					c.isStopped.Done()
@@ -231,9 +237,6 @@ func (c *UDPClient) StartPackets(config util.Config) {
 				continue
 			}
 			c.packetSent.Inc()
-			c.mutex.Lock()
-			c.pair.PendingRequestsMap[c.packetSequence] = baseMsg.SendTimeStamp
-			c.mutex.Unlock()
 			//logrus.Infof("%s-%s: message sent seq: %d, sendtimestamp: %d", c.pair.SourceIP, c.pair.DestinationIP, c.packetSequence, sendTimeStamp)
 		}
 		/* Sleep for approx. one send interval */
