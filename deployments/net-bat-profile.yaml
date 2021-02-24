@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: net-bat-profile
+data:
+  net-bat-profiles.cfg: |
+    udp:
+      send-rate: 500
+      packet-size: 1000
+      packet-timeout: 5
+    http:
+      send-rate: 100
+      http-query: "http://server.domain.tld/path/to/the/page"
+      html-page : |
+        This is the content of the static HTML page to be delivered
+        .....
+        .....
+        .....
+        End of page

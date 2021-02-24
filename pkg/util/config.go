@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"gopkg.in/yaml.v2"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -44,41 +45,45 @@ type Config interface {
 
 // LoadConfig parse the config map and load the config struct
 func LoadConfig(cm *v1.ConfigMap) (Config, error) {
-	c := config{}
-	var err error
-	if val, ok := cm.Data["udp-send-rate"]; ok {
+	var c config
+	yamlMap := make(map[string]map[string]string)
+	err := yaml.Unmarshal([]byte(cm.Data["net-bat-profiles.cfg"]), &yamlMap)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing the config map data %s", cm.Name)
+	}
+	if val, ok := yamlMap["udp"]["send-rate"]; ok {
 		c.udpSendRate, err = parseIntValue(val)
 		if err != nil {
 			return nil, fmt.Errorf("parsing udp-send-rate failed: err %v", err)
 		}
 	}
 
-	if val, ok := cm.Data["udp-packet-size"]; ok {
+	if val, ok := yamlMap["udp"]["packet-size"]; ok {
 		c.udpPacketSize, err = parseIntValue(val)
 		if err != nil {
 			return nil, fmt.Errorf("parsing udp-packet-size failed: err %v", err)
 		}
 	}
 
-	if val, ok := cm.Data["udp-packet-timeout"]; ok {
+	if val, ok := yamlMap["udp"]["packet-timeout"]; ok {
 		c.udpPacketTimeout, err = parseIntValue(val)
 		if err != nil {
 			return nil, fmt.Errorf("parsing udp-packet-timeout failed: err %v", err)
 		}
 	}
 
-	if val, ok := cm.Data["http_send_rate"]; ok {
+	if val, ok := yamlMap["http"]["send-rate"]; ok {
 		c.httpSendRate, err = parseIntValue(val)
 		if err != nil {
 			return nil, fmt.Errorf("parsing http send rate failed: err %v", err)
 		}
 	}
 
-	if val, ok := cm.Data["http-query"]; ok {
+	if val, ok := yamlMap["http"]["http-query"]; ok {
 		c.httpQuery = val
 	}
 
-	if val, ok := cm.Data["html-page"]; ok {
+	if val, ok := yamlMap["http"]["html-page"]; ok {
 		c.htmlPage = val
 	}
 

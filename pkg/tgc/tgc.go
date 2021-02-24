@@ -66,14 +66,18 @@ func (tg *podTGC) StartTGC() {
 			cm := obj.(*v1.ConfigMap)
 			switch cm.Name {
 			case "net-bat-conf":
-				config, batPairs, err := handleAddNetBatConfigMap(cm, tg.podName)
+				batPairs, err := handleAddNetBatConfigMap(cm, tg.podName)
 				if err != nil {
-					logrus.Errorf("error in parsing configmap %v: error %v", cm, err)
+					logrus.Errorf("error processing configmap %v: error %v", cm, err)
 					return
 				}
-				tg.config = config
 				tg.netBatPairs = batPairs
-				tg.createNetBatTgenClients()
+				if tg.config != nil {
+					logrus.Infof("starting tgen clients for pair: %v", tg.netBatPairs)
+					tg.createNetBatTgenClients()
+				} else {
+					logrus.Infof("net bat profile is not configured yet, returning")
+				}
 				return
 			case "storage-bat-conf":
 				logrus.Errorf("storage bat config not supported")
@@ -81,11 +85,33 @@ func (tg *podTGC) StartTGC() {
 			case "dpdk-bat-conf":
 				logrus.Errorf("dpdk bat config not supported")
 				return
+			case "net-bat-profile":
+				config, err := util.LoadConfig(cm)
+				logrus.Infof("the config values are %v", config)
+				if err != nil {
+					logrus.Errorf("error processing configmap %v: error %v", cm, err)
+					return
+				}
+				tg.config = config
+				if tg.netBatPairs != nil {
+					logrus.Infof("net bat profile is set. starting tgen clients for pair: %v", tg.netBatPairs)
+					tg.createNetBatTgenClients()
+				}
 			}
-
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			//logrus.Infof("update config map not yet supported")
+			cm := newObj.(*v1.ConfigMap)
+			switch cm.Name {
+			case "net-bat-profile":
+				config, err := util.LoadConfig(cm)
+				logrus.Infof("the config values are %v", config)
+				if err != nil {
+					logrus.Errorf("error processing configmap %v: error %v", cm, err)
+					return
+				}
+				tg.config = config
+				//TODO: should we update the traffic profile for the running traffic ?
+			}
 		},
 		DeleteFunc: func(obj interface{}) {
 			cm := obj.(*v1.ConfigMap)
@@ -98,6 +124,9 @@ func (tg *podTGC) StartTGC() {
 				return
 			case "dpdk-bat-conf":
 				logrus.Errorf("dpdk bat config not supported")
+				return
+			case "net-bat-profile":
+				tg.config = nil
 				return
 			}
 		},
@@ -148,19 +177,14 @@ func (tg *podTGC) deleteNetBatTgenClients() {
 		pair.ClientConnection.TearDownConnection()
 	}
 	tg.netBatPairs = nil
-	tg.config = nil
 }
 
-func handleAddNetBatConfigMap(cm *v1.ConfigMap, podName string) (util.Config, []util.BatPair, error) {
-	config, err := util.LoadConfig(cm)
-	if err != nil {
-		return nil, nil, err
-	}
+func handleAddNetBatConfigMap(cm *v1.ConfigMap, podName string) ([]util.BatPair, error) {
 	pairings := []util.BatPair{}
-	if val, ok := cm.Data["pairing"]; ok {
+	if val, ok := cm.Data["net-bat-pairing.cfg"]; ok {
 		pairings = getAvailableNetBatPairings(podName, val)
 	}
-	return config, pairings, nil
+	return pairings, nil
 }
 
 func getAvailableNetBatPairings(podName, pairingStr string) []util.BatPair {

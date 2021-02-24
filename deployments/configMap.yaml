@@ -16,24 +16,13 @@ kind: ConfigMap
 metadata:
   name: net-bat-conf
 data:
-  udp-send-rate: "500"
-  udp-packet-size: "1000"
-  udp-packet-timeout: "5"
-  http_send_rate: "100"
-  pairing: |
+  net-bat-pairing.cfg: |
     tgen-tapp-pod-a, 10.10.10.1, 10.10.10.2, ovsnet, secondary, udp
     tgen-tapp-pod-a, 10.10.10.1, 10.10.10.3, ovsnet, secondary, udp
     tgen-tapp-pod-a, 10.10.10.1, 10.10.10.2, ovsnet, secondary, http
-    tgen-tapp-pod-a, 192.168.167.136, 192.168.167.139, pod, primary, udp
-    tgen-tapp-pod-a, 192.168.167.136, tgen-tapp-c-headless-service, headless, primary, udp
-    tgen-tapp-pod-a, 192.168.167.136, tgen-tapp-d-clusterip-service, clusterip, primary, udp
+    tgen-tapp-pod-a, 192.168.167.156, 192.168.167.163, pod, primary, udp
+    tgen-tapp-pod-a, 192.168.167.156, tgen-tapp-c-headless-service, headless, primary, udp
+    tgen-tapp-pod-a, 192.168.167.156, tgen-tapp-d-clusterip-service, clusterip, primary, udp
     tgen-tapp-pod-b, 10.10.10.2, 10.10.10.1, ovsnet, secondary, udp
     tgen-tapp-pod-b, 10.10.10.2, 10.10.10.3, ovsnet, secondary, udp
     tgen-tapp-pod-b, 10.10.10.2, 10.10.10.1, ovsnet, secondary, http
-  http-query: "path/to/the/page"
-  html-page: |
-    This is the content of the static HTML page to be delivered
-    .....
-    .....
-    .....
-    End of page
