@@ -31,6 +31,8 @@ import (
 const (
 	// packetSent represents total packets sent
 	packetSentStr = "packets_sent"
+	// packetSendFailed represents send failed packets
+	packetSendFailedStr = "packet_send_failed"
 	// packetReceived represents total packets received
 	packetReceivedStr = "packets_received"
 	// packetDropped represents total packets received
@@ -41,18 +43,19 @@ const (
 
 // UDPClient udp client implementation
 type UDPClient struct {
-	isStopped       sync.WaitGroup
-	connection      *net.UDPConn
-	pair            *util.BatPair
-	packetSequence  int64
-	mutex           *sync.Mutex
-	msgHeaderLength int
-	stop            bool
-	promRegistry    *prometheus.Registry
-	packetSent      prometheus.Counter
-	packetReceived  prometheus.Counter
-	packetDropped   prometheus.Counter
-	roundTrip       prometheus.Counter
+	isStopped        sync.WaitGroup
+	connection       *net.UDPConn
+	pair             *util.BatPair
+	packetSequence   int64
+	mutex            *sync.Mutex
+	msgHeaderLength  int
+	stop             bool
+	promRegistry     *prometheus.Registry
+	packetSent       prometheus.Counter
+	packetSendFailed prometheus.Counter
+	packetReceived   prometheus.Counter
+	packetDropped    prometheus.Counter
+	roundTrip        prometheus.Counter
 }
 
 // NewUDPClient creates a new udp client
@@ -88,6 +91,8 @@ func (c *UDPClient) SetupConnection() error {
 	labelMap["destination"] = c.pair.DestinationIP
 	c.packetSent = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, packetSentStr, "total packet sent", labelMap)
 	c.promRegistry.MustRegister(c.packetSent)
+	c.packetSendFailed = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, packetSendFailedStr, "total packet send failed", labelMap)
+	c.promRegistry.MustRegister(c.packetSendFailed)
 	c.packetReceived = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, packetReceivedStr, "total packet received", labelMap)
 	c.promRegistry.MustRegister(c.packetReceived)
 	c.packetDropped = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, packetDroppedStr, "total packet dropped", labelMap)
@@ -213,6 +218,7 @@ func (c *UDPClient) StartPackets(config util.Config) {
 			baseMsg.SendTimeStamp = sendTimeStamp
 			newMsgByteArr, err := msgpack.Marshal(&baseMsg)
 			if err != nil {
+				c.packetSendFailed.Inc()
 				logrus.Errorf("error in encoding the client message %v", err)
 				if c.stop == true {
 					c.isStopped.Done()
@@ -229,6 +235,7 @@ func (c *UDPClient) StartPackets(config util.Config) {
 				c.mutex.Lock()
 				delete(c.pair.PendingRequestsMap, c.packetSequence)
 				c.mutex.Unlock()
+				c.packetSendFailed.Inc()
 				logrus.Errorf("error in writing message %v to client connection: err %v", baseMsg, err)
 				if c.stop == true {
 					c.isStopped.Done()
@@ -255,6 +262,7 @@ func (c *UDPClient) TearDownConnection() {
 	c.connection.Close()
 	c.isStopped.Wait()
 	c.promRegistry.Unregister(c.packetSent)
+	c.promRegistry.Unregister(c.packetSendFailed)
 	c.promRegistry.Unregister(c.packetReceived)
 	c.promRegistry.Unregister(c.packetDropped)
 	c.promRegistry.Unregister(c.roundTrip)
