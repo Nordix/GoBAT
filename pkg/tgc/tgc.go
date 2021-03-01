@@ -17,7 +17,6 @@
 package tgc
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/Nordix/GoBAT/pkg/tgen"
@@ -148,14 +147,12 @@ func (tg *podTGC) createNetBatTgenClients() {
 			client, err := tgen.NewClient(p, tg.promRegistry)
 			if err != nil {
 				logrus.Errorf("error creating client for pair %v: %v", p, err)
-				p.Err = util.Error{Code: util.TrafficNotStarted, Description: fmt.Sprintf("%v", err)}
 				return
 			}
 			p.ClientConnection = client
 			err = p.ClientConnection.SetupConnection()
 			if err != nil {
 				logrus.Errorf("error in setting up the connection for pair %v: %v", p, err)
-				p.Err = util.Error{Code: util.TrafficNotStarted, Description: fmt.Sprintf("%v", err)}
 				return
 			}
 			go p.ClientConnection.HandleTimeouts(tg.config)
@@ -171,9 +168,6 @@ func (tg *podTGC) deleteNetBatTgenClients() {
 		return
 	}
 	for _, pair := range tg.netBatPairs {
-		if pair.ClientConnection == nil || pair.Err.Code == util.TrafficNotStarted {
-			continue
-		}
 		pair.ClientConnection.TearDownConnection()
 	}
 	tg.netBatPairs = nil

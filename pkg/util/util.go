@@ -37,8 +37,6 @@ const (
 	Port = 8890
 	// PromPort prometheus metric http endpoint port
 	PromPort = 2212
-	// TrafficNotStarted error code for traffic not started
-	TrafficNotStarted = 1
 )
 
 // Error error associated with pair

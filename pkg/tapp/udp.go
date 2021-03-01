@@ -121,6 +121,9 @@ func (s *UDPServer) ReadFromSocket(bufSize int) {
 
 // TearDownServer stop the server
 func (s *UDPServer) TearDownServer() {
+	if s.connection == nil {
+		return
+	}
 	s.stop = true
 	s.connection.Close()
 	s.isStopped.Wait()
