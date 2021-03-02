@@ -2,13 +2,24 @@
 github.com/beorn7/perks/quantile
 # github.com/cespare/xxhash/v2 v2.1.1
 github.com/cespare/xxhash/v2
+# github.com/containernetworking/cni v0.8.0
+github.com/containernetworking/cni/pkg/skel
+github.com/containernetworking/cni/pkg/types
+github.com/containernetworking/cni/pkg/types/020
+github.com/containernetworking/cni/pkg/types/current
+github.com/containernetworking/cni/pkg/utils
+github.com/containernetworking/cni/pkg/version
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
+# github.com/go-logfmt/logfmt v0.5.0
+github.com/go-logfmt/logfmt
 # github.com/go-logr/logr v0.2.0
 github.com/go-logr/logr
 # github.com/gogo/protobuf v1.3.1
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/sortkeys
+# github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
+github.com/golang/glog
 # github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
 ## explicit
 # github.com/golang/protobuf v1.4.3
@@ -35,14 +46,34 @@ github.com/googleapis/gnostic/openapiv2
 # github.com/hashicorp/golang-lru v0.5.1
 github.com/hashicorp/golang-lru
 github.com/hashicorp/golang-lru/simplelru
+# github.com/imdario/mergo v0.3.5
+github.com/imdario/mergo
+# github.com/intel/network-resources-injector v0.0.0-20201215195952-4f073638930a
+github.com/intel/network-resources-injector/pkg/types
+# github.com/intel/userspace-cni-network-plugin v0.0.0-20201116143459-807c52367c73
+github.com/intel/userspace-cni-network-plugin/logging
+github.com/intel/userspace-cni-network-plugin/pkg/annotations
+github.com/intel/userspace-cni-network-plugin/pkg/k8sclient
+github.com/intel/userspace-cni-network-plugin/pkg/types
 # github.com/json-iterator/go v1.1.10
 github.com/json-iterator/go
+# github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.1.1-0.20201119153432-9d213757d22d
+github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io
+github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.1
 github.com/modern-go/reflect2
+# github.com/openshift/app-netutil v0.0.0-20210203214838-7a1305d414c3
+## explicit
+github.com/openshift/app-netutil/lib/v1alpha
+github.com/openshift/app-netutil/pkg/networkstatus
+github.com/openshift/app-netutil/pkg/types
+github.com/openshift/app-netutil/pkg/userspace
+# github.com/pkg/errors v0.9.1
+github.com/pkg/errors
 # github.com/prometheus/client_golang v1.9.0
 ## explicit
 github.com/prometheus/client_golang/prometheus
@@ -61,8 +92,8 @@ github.com/prometheus/procfs/internal/util
 # github.com/sirupsen/logrus v1.7.0
 ## explicit
 github.com/sirupsen/logrus
-# github.com/stretchr/testify v1.6.1
-## explicit
+# github.com/spf13/pflag v1.0.5
+github.com/spf13/pflag
 # github.com/vmihailenco/msgpack v4.0.4+incompatible
 ## explicit
 github.com/vmihailenco/msgpack
@@ -233,7 +264,7 @@ k8s.io/apimachinery/pkg/util/yaml
 k8s.io/apimachinery/pkg/version
 k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/third_party/forked/golang/reflect
-# k8s.io/client-go v1.5.1 => k8s.io/kubernetes/staging/src/k8s.io/client-go v0.0.0-20201029161059-917dcbabe107
+# k8s.io/client-go v11.0.0+incompatible => k8s.io/kubernetes/staging/src/k8s.io/client-go v0.0.0-20201029161059-917dcbabe107
 ## explicit
 k8s.io/client-go/discovery
 k8s.io/client-go/informers
@@ -380,8 +411,12 @@ k8s.io/client-go/pkg/version
 k8s.io/client-go/plugin/pkg/client/auth/exec
 k8s.io/client-go/rest
 k8s.io/client-go/rest/watch
+k8s.io/client-go/tools/auth
 k8s.io/client-go/tools/cache
+k8s.io/client-go/tools/clientcmd
 k8s.io/client-go/tools/clientcmd/api
+k8s.io/client-go/tools/clientcmd/api/latest
+k8s.io/client-go/tools/clientcmd/api/v1
 k8s.io/client-go/tools/metrics
 k8s.io/client-go/tools/pager
 k8s.io/client-go/tools/reference
@@ -389,7 +424,9 @@ k8s.io/client-go/transport
 k8s.io/client-go/util/cert
 k8s.io/client-go/util/connrotation
 k8s.io/client-go/util/flowcontrol
+k8s.io/client-go/util/homedir
 k8s.io/client-go/util/keyutil
+k8s.io/client-go/util/retry
 k8s.io/client-go/util/workqueue
 # k8s.io/klog/v2 v2.4.0 => k8s.io/klog/v2 v2.3.1-0.20201028104956-52c62e3b70a9
 ## explicit

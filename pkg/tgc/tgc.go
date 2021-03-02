@@ -17,11 +17,13 @@
 package tgc
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/Nordix/GoBAT/pkg/tapp"
 	"github.com/Nordix/GoBAT/pkg/tgen"
 	"github.com/Nordix/GoBAT/pkg/util"
+	netlib "github.com/openshift/app-netutil/lib/v1alpha"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -67,14 +69,16 @@ func (tg *podTGC) StartTGC() {
 			cm := obj.(*v1.ConfigMap)
 			switch cm.Name {
 			case "net-bat-conf":
-				batPairs, err := handleAddNetBatConfigMap(cm, tg.podName)
+				batPairs, err := handleAddNetBatConfigMap(cm, tg.namespace, tg.podName)
 				if err != nil {
-					logrus.Errorf("error processing configmap %v: error %v", cm, err)
+					logrus.Errorf("error parsing the net bat config map: %v", err)
 					return
 				}
 				tg.netBatPairs = batPairs
 				if tg.config != nil {
-					logrus.Infof("starting tgen clients for pair: %v", tg.netBatPairs)
+					for _, batPair := range tg.netBatPairs {
+						logrus.Infof("bat pair %v, %s, %s, %s", *batPair.Source, batPair.Destination, batPair.TrafficProfile, batPair.TrafficScenario)
+					}
 					tg.createNetBatTgenClients()
 				} else {
 					logrus.Infof("net bat profile is not configured yet, returning")
@@ -159,7 +163,6 @@ func (tg *podTGC) createNetBatTgenClients() {
 	for index := range tg.netBatPairs {
 		go func(p *util.BatPair) {
 			p.PendingRequestsMap = make(map[int64]int64)
-			p.StartTime = util.GetTimestampMicroSec()
 			client, err := tgen.NewClient(p, tg.promRegistry)
 			if err != nil {
 				logrus.Errorf("error creating client for pair %v: %v", p, err)
@@ -203,28 +206,66 @@ func (tg *podTGC) startTappServer() (util.ServerImpl, error) {
 	return server, nil
 }
 
-func handleAddNetBatConfigMap(cm *v1.ConfigMap, podName string) ([]util.BatPair, error) {
+func handleAddNetBatConfigMap(cm *v1.ConfigMap, namespace, podName string) ([]util.BatPair, error) {
 	pairings := []util.BatPair{}
+	var err error
 	if val, ok := cm.Data["net-bat-pairing.cfg"]; ok {
-		pairings = getAvailableNetBatPairings(podName, val)
+		pairings, err = getAvailableNetBatPairings(namespace, podName, val)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return pairings, nil
 }
 
-func getAvailableNetBatPairings(podName, pairingStr string) []util.BatPair {
+func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.BatPair, error) {
 	lines := strings.Split(string(pairingStr), "\n")
 	pairs := make([]util.BatPair, 0)
+	ifaceResponse, err := netlib.GetInterfaces()
+	if err != nil {
+		return nil, err
+	}
 	for _, line := range lines {
-		elements := trimSlice(strings.Split(line, ","))
-		// add only pod pairing and ignore others
-		if elements[0] != podName {
+		if line == "" {
 			continue
 		}
-		pairs = append(pairs, util.BatPair{SourceIP: elements[1], DestinationIP: elements[2],
-			TrafficCase: elements[3], TrafficProfile: elements[4], TrafficType: elements[5]})
-
+		elements := strings.Split(line, "},")
+		source := &util.Source{}
+		sourceStr := strings.TrimSpace(elements[0] + "}")
+		if err := json.Unmarshal([]byte(sourceStr), source); err != nil {
+			logrus.Errorf("error in parsing the source for pair %v: %v", sourceStr, err)
+			continue
+		}
+		pairType := source.Type
+		pairName := source.Name
+		if source.Namespace != namespace {
+			continue
+		} else if pairType == "pod" && pairName != podName {
+			continue
+		} else if pairType == "deployment" && !strings.HasPrefix(podName, pairName) {
+			continue
+		}
+		var primaryIfaceIPAddress string
+		for _, iface := range ifaceResponse.Interface {
+			if source.Net != "" && iface.NetworkStatus.Name == namespace+"/"+source.Net {
+				source.SourceIP = iface.NetworkStatus.IPs[0]
+				break
+			} else if source.Interface != "" && iface.NetworkStatus.Interface == source.Interface {
+				source.SourceIP = iface.NetworkStatus.IPs[0]
+				break
+			}
+			if iface.NetworkStatus.Interface == "" {
+				primaryIfaceIPAddress = iface.NetworkStatus.IPs[0]
+			}
+		}
+		if source.SourceIP == "" {
+			// assign primary network eth0 interface ip address
+			source.SourceIP = primaryIfaceIPAddress
+		}
+		elements = trimSlice(strings.Split(elements[1], ","))
+		pairs = append(pairs, util.BatPair{Source: source, Destination: elements[0], TrafficProfile: elements[1], TrafficScenario: elements[2]})
 	}
-	return pairs
+	return pairs, nil
 }
 
 func trimSlice(strs []string) []string {

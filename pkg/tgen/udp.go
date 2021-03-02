@@ -17,6 +17,7 @@
 package tgen
 
 import (
+	"encoding/json"
 	"net"
 	"strconv"
 	"sync"
@@ -77,14 +78,20 @@ func NewUDPClient(p *util.BatPair, reg *prometheus.Registry) util.ClientImpl {
 // SetupConnection sets up udp client connection
 func (c *UDPClient) SetupConnection(config util.Config) error {
 	labelMap := make(map[string]string)
-	labelMap["source"] = c.pair.SourceIP
-	labelMap["destination"] = c.pair.DestinationIP
-	raddr, err := net.ResolveUDPAddr("udp", c.pair.DestinationIP+":"+strconv.Itoa(util.Port))
+	labelMap["destination"] = c.pair.Destination
+	labelMap["scenario"] = c.pair.TrafficScenario
+	source, err := json.Marshal(c.pair.Source)
 	if err != nil {
 		c.updateTrafficNotStarted(labelMap)
 		return err
 	}
-	laddr, err := net.ResolveUDPAddr("udp", c.pair.SourceIP+":0")
+	labelMap["source"] = string(source)
+	raddr, err := net.ResolveUDPAddr("udp", c.pair.Destination+":"+strconv.Itoa(util.Port))
+	if err != nil {
+		c.updateTrafficNotStarted(labelMap)
+		return err
+	}
+	laddr, err := net.ResolveUDPAddr("udp", c.pair.Source.SourceIP+":0")
 	logrus.Infof("local address: %s, server address: %s connecting ", laddr.String(), raddr.String())
 	conn, err := net.DialUDP("udp", laddr, raddr)
 	if err != nil {
@@ -94,21 +101,21 @@ func (c *UDPClient) SetupConnection(config util.Config) error {
 	// set read buffer size into 512KB
 	conn.SetReadBuffer(512 * 1024)
 	c.connection = conn
-	c.packetSent = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, packetSentStr, "total packet sent", labelMap)
+	c.packetSent = util.NewCounter(c.pair.Source.Namespace, c.pair.TrafficProfile, packetSentStr, "total packet sent", labelMap)
 	c.promRegistry.MustRegister(c.packetSent)
-	c.packetSendFailed = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, packetSendFailedStr, "total packet send failed", labelMap)
+	c.packetSendFailed = util.NewCounter(c.pair.Source.Namespace, c.pair.TrafficProfile, packetSendFailedStr, "total packet send failed", labelMap)
 	c.promRegistry.MustRegister(c.packetSendFailed)
-	c.packetReceived = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, packetReceivedStr, "total packet received", labelMap)
+	c.packetReceived = util.NewCounter(c.pair.Source.Namespace, c.pair.TrafficProfile, packetReceivedStr, "total packet received", labelMap)
 	c.promRegistry.MustRegister(c.packetReceived)
-	c.packetDropped = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, packetDroppedStr, "total packet dropped", labelMap)
+	c.packetDropped = util.NewCounter(c.pair.Source.Namespace, c.pair.TrafficProfile, packetDroppedStr, "total packet dropped", labelMap)
 	c.promRegistry.MustRegister(c.packetDropped)
-	c.roundTrip = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, roundTripTimeStr, "total round trip time", labelMap)
+	c.roundTrip = util.NewCounter(c.pair.Source.Namespace, c.pair.TrafficProfile, roundTripTimeStr, "total round trip time", labelMap)
 	c.promRegistry.MustRegister(c.roundTrip)
 	return nil
 }
 
 func (c *UDPClient) updateTrafficNotStarted(labelMap map[string]string) {
-	c.trafficNotStarted = util.NewCounter(c.pair.TrafficType, c.pair.TrafficCase, trafficNotStartedStr, "traffic not started", labelMap)
+	c.trafficNotStarted = util.NewCounter(c.pair.Source.Namespace, c.pair.TrafficProfile, trafficNotStartedStr, "traffic not started", labelMap)
 	c.promRegistry.MustRegister(c.trafficNotStarted)
 	c.trafficNotStarted.Inc()
 }

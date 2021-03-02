@@ -39,6 +39,16 @@ const (
 	PromPort = 2212
 )
 
+// Source represents source of the BatPair
+type Source struct {
+	Type      string `json:"type"`
+	Namespace string `json:"ns"`
+	Name      string `json:"name"`
+	Net       string `json:"net,omitempty"`
+	Interface string `json:"interface,omitempty"`
+	SourceIP  string `json:"source_ip,omitempty"`
+}
+
 // Error error associated with pair
 type Error struct {
 	Code        int
@@ -47,15 +57,12 @@ type Error struct {
 
 // BatPair represents the BAT traffic to be run between two entities
 type BatPair struct {
-	SourceIP           string
-	DestinationIP      string
-	TrafficCase        string
+	Source             *Source
+	Destination        string
 	TrafficProfile     string
-	TrafficType        string
+	TrafficScenario    string
 	PendingRequestsMap map[int64]int64
-	StartTime          int64
 	ClientConnection   ClientImpl
-	Err                Error
 }
 
 // Message to be sent and received by protocol clients
