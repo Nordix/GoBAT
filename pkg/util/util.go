@@ -73,14 +73,14 @@ type Server struct {
 
 // ServerImpl methods to be implemented by a server
 type ServerImpl interface {
-	SetupServerConnection() error
+	SetupServerConnection(Config) error
 	ReadFromSocket(bufSize int)
 	TearDownServer()
 }
 
 // ClientImpl methods to be implemented by a client
 type ClientImpl interface {
-	SetupConnection() error
+	SetupConnection(Config) error
 	TearDownConnection()
 	SocketRead(bufSize int)
 	HandleTimeouts(Config)

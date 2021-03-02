@@ -24,7 +24,6 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/Nordix/GoBAT/pkg/tapp"
 	"github.com/Nordix/GoBAT/pkg/tgc"
 	"github.com/Nordix/GoBAT/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -84,12 +83,6 @@ func main() {
 		return
 	}
 
-	tappServer, err := startTappServer(util.Port, util.ProtocolUDP, readBufferSize)
-	if err != nil {
-		logrus.Errorf("server connection creation failed: err %v", err)
-		return
-	}
-
 	reg := prometheus.NewRegistry()
 	go util.RegisterPromHandler(reg)
 
@@ -109,24 +102,9 @@ func main() {
 	<-done
 
 	tgController.StopTGC()
-	tappServer.TearDownServer()
 
 	logrus.Infof("tgen tapp is stopped")
 
-}
-
-func startTappServer(port int, protocol string, readBufSize *int) (util.ServerImpl, error) {
-	server, err := tapp.NewServer(util.Port, util.ProtocolUDP)
-	if err != nil {
-		return nil, err
-	}
-	err = server.SetupServerConnection()
-	if err != nil {
-		return nil, err
-	}
-	go server.ReadFromSocket(*readBufSize)
-
-	return server, nil
 }
 
 // GetClient returns a k8s clientset to the request from inside of cluster

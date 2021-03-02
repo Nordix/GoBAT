@@ -75,7 +75,7 @@ func NewUDPClient(p *util.BatPair, reg *prometheus.Registry) util.ClientImpl {
 }
 
 // SetupConnection sets up udp client connection
-func (c *UDPClient) SetupConnection() error {
+func (c *UDPClient) SetupConnection(config util.Config) error {
 	labelMap := make(map[string]string)
 	labelMap["source"] = c.pair.SourceIP
 	labelMap["destination"] = c.pair.DestinationIP

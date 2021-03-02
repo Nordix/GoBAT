@@ -19,6 +19,7 @@ package tgc
 import (
 	"strings"
 
+	"github.com/Nordix/GoBAT/pkg/tapp"
 	"github.com/Nordix/GoBAT/pkg/tgen"
 	"github.com/Nordix/GoBAT/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -41,6 +42,7 @@ type podTGC struct {
 	netBatPairs          []util.BatPair
 	stopper              chan struct{}
 	promRegistry         *prometheus.Registry
+	udpServer            util.ServerImpl
 }
 
 // TGController traffic gen controller
@@ -92,6 +94,14 @@ func (tg *podTGC) StartTGC() {
 					return
 				}
 				tg.config = config
+				if config.HasUDPProfile() {
+					tappUDPServer, err := tg.startTappServer()
+					if err != nil {
+						logrus.Errorf("udp server connection creation failed: err %v", err)
+						return
+					}
+					tg.udpServer = tappUDPServer
+				}
 				if tg.netBatPairs != nil {
 					logrus.Infof("net bat profile is set. starting tgen clients for pair: %v", tg.netBatPairs)
 					tg.createNetBatTgenClients()
@@ -126,6 +136,9 @@ func (tg *podTGC) StartTGC() {
 				return
 			case "net-bat-profile":
 				tg.config = nil
+				if tg.udpServer != nil {
+					tg.udpServer.TearDownServer()
+				}
 				return
 			}
 		},
@@ -137,6 +150,9 @@ func (tg *podTGC) StartTGC() {
 func (tg *podTGC) StopTGC() {
 	close(tg.stopper)
 	tg.deleteNetBatTgenClients()
+	if tg.udpServer != nil {
+		tg.udpServer.TearDownServer()
+	}
 }
 
 func (tg *podTGC) createNetBatTgenClients() {
@@ -150,7 +166,7 @@ func (tg *podTGC) createNetBatTgenClients() {
 				return
 			}
 			p.ClientConnection = client
-			err = p.ClientConnection.SetupConnection()
+			err = p.ClientConnection.SetupConnection(tg.config)
 			if err != nil {
 				logrus.Errorf("error in setting up the connection for pair %v: %v", p, err)
 				return
@@ -171,6 +187,20 @@ func (tg *podTGC) deleteNetBatTgenClients() {
 		pair.ClientConnection.TearDownConnection()
 	}
 	tg.netBatPairs = nil
+}
+
+func (tg *podTGC) startTappServer() (util.ServerImpl, error) {
+	server, err := tapp.NewServer(util.Port, util.ProtocolUDP)
+	if err != nil {
+		return nil, err
+	}
+	err = server.SetupServerConnection(tg.config)
+	if err != nil {
+		return nil, err
+	}
+	go server.ReadFromSocket(tg.socketReadBufferSize)
+
+	return server, nil
 }
 
 func handleAddNetBatConfigMap(cm *v1.ConfigMap, podName string) ([]util.BatPair, error) {

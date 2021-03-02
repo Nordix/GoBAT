@@ -48,7 +48,7 @@ func NewUDPServer(port int) util.ServerImpl {
 }
 
 // SetupServerConnection creates server socket and listens for incoming messages
-func (s *UDPServer) SetupServerConnection() error {
+func (s *UDPServer) SetupServerConnection(config util.Config) error {
 	listeningAddress, err := net.ResolveUDPAddr("udp", ":"+strconv.Itoa(s.Server.Port))
 	if err != nil {
 		return err

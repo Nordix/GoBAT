@@ -25,6 +25,8 @@ import (
 )
 
 type config struct {
+	udp              bool
+	http             bool
 	udpSendRate      int
 	udpPacketSize    int
 	udpPacketTimeout int
@@ -35,6 +37,8 @@ type config struct {
 
 // Config interface
 type Config interface {
+	HasUDPProfile() bool
+	HasHTTPProfile() bool
 	GetUDPSendRate() int
 	GetUDPPacketSize() int
 	GetUDPPacketTimeout() int
@@ -51,43 +55,60 @@ func LoadConfig(cm *v1.ConfigMap) (Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error parsing the config map data %s", cm.Name)
 	}
-	if val, ok := yamlMap["udp"]["send-rate"]; ok {
-		c.udpSendRate, err = parseIntValue(val)
-		if err != nil {
-			return nil, fmt.Errorf("parsing udp-send-rate failed: err %v", err)
+
+	// Parse UDP profile
+	if udpEntry, ok := yamlMap["udp"]; ok {
+		c.udp = true
+		if val, ok := udpEntry["send-rate"]; ok {
+			c.udpSendRate, err = parseIntValue(val)
+			if err != nil {
+				return nil, fmt.Errorf("parsing udp-send-rate failed: err %v", err)
+			}
+		}
+
+		if val, ok := udpEntry["packet-size"]; ok {
+			c.udpPacketSize, err = parseIntValue(val)
+			if err != nil {
+				return nil, fmt.Errorf("parsing udp-packet-size failed: err %v", err)
+			}
+		}
+
+		if val, ok := udpEntry["packet-timeout"]; ok {
+			c.udpPacketTimeout, err = parseIntValue(val)
+			if err != nil {
+				return nil, fmt.Errorf("parsing udp-packet-timeout failed: err %v", err)
+			}
 		}
 	}
 
-	if val, ok := yamlMap["udp"]["packet-size"]; ok {
-		c.udpPacketSize, err = parseIntValue(val)
-		if err != nil {
-			return nil, fmt.Errorf("parsing udp-packet-size failed: err %v", err)
+	// Parse HTTP Profile
+	if httpEntry, ok := yamlMap["http"]; ok {
+		c.http = true
+		if val, ok := httpEntry["send-rate"]; ok {
+			c.httpSendRate, err = parseIntValue(val)
+			if err != nil {
+				return nil, fmt.Errorf("parsing http send rate failed: err %v", err)
+			}
 		}
-	}
 
-	if val, ok := yamlMap["udp"]["packet-timeout"]; ok {
-		c.udpPacketTimeout, err = parseIntValue(val)
-		if err != nil {
-			return nil, fmt.Errorf("parsing udp-packet-timeout failed: err %v", err)
+		if val, ok := httpEntry["http-query"]; ok {
+			c.httpQuery = val
 		}
-	}
 
-	if val, ok := yamlMap["http"]["send-rate"]; ok {
-		c.httpSendRate, err = parseIntValue(val)
-		if err != nil {
-			return nil, fmt.Errorf("parsing http send rate failed: err %v", err)
+		if val, ok := httpEntry["html-page"]; ok {
+			c.htmlPage = val
 		}
-	}
-
-	if val, ok := yamlMap["http"]["http-query"]; ok {
-		c.httpQuery = val
-	}
-
-	if val, ok := yamlMap["http"]["html-page"]; ok {
-		c.htmlPage = val
 	}
 
 	return &c, nil
+}
+
+func (c *config) HasUDPProfile() bool {
+	return c.udp
+}
+
+func (c *config) HasHTTPProfile() bool {
+	return c.http
 }
 
 func (c *config) GetUDPSendRate() int {
