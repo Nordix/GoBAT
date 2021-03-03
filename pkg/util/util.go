@@ -31,6 +31,8 @@ const (
 	ProtocolHTTP = "http"
 	// ProtocolUDP udp protocol string
 	ProtocolUDP = "udp"
+	//PromNamespace prometheus udp namespace string
+	PromNamespace = "netbat"
 	// MaxBufferSize max buffer size
 	MaxBufferSize = 65535
 	// Port server port

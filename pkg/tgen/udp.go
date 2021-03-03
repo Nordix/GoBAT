@@ -101,21 +101,21 @@ func (c *UDPClient) SetupConnection(config util.Config) error {
 	// set read buffer size into 512KB
 	conn.SetReadBuffer(512 * 1024)
 	c.connection = conn
-	c.packetSent = util.NewCounter(c.pair.Source.Namespace, c.pair.TrafficProfile, packetSentStr, "total packet sent", labelMap)
+	c.packetSent = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetSentStr, "total packet sent", labelMap)
 	c.promRegistry.MustRegister(c.packetSent)
-	c.packetSendFailed = util.NewCounter(c.pair.Source.Namespace, c.pair.TrafficProfile, packetSendFailedStr, "total packet send failed", labelMap)
+	c.packetSendFailed = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetSendFailedStr, "total packet send failed", labelMap)
 	c.promRegistry.MustRegister(c.packetSendFailed)
-	c.packetReceived = util.NewCounter(c.pair.Source.Namespace, c.pair.TrafficProfile, packetReceivedStr, "total packet received", labelMap)
+	c.packetReceived = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetReceivedStr, "total packet received", labelMap)
 	c.promRegistry.MustRegister(c.packetReceived)
-	c.packetDropped = util.NewCounter(c.pair.Source.Namespace, c.pair.TrafficProfile, packetDroppedStr, "total packet dropped", labelMap)
+	c.packetDropped = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetDroppedStr, "total packet dropped", labelMap)
 	c.promRegistry.MustRegister(c.packetDropped)
-	c.roundTrip = util.NewCounter(c.pair.Source.Namespace, c.pair.TrafficProfile, roundTripTimeStr, "total round trip time", labelMap)
+	c.roundTrip = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, roundTripTimeStr, "total round trip time", labelMap)
 	c.promRegistry.MustRegister(c.roundTrip)
 	return nil
 }
 
 func (c *UDPClient) updateTrafficNotStarted(labelMap map[string]string) {
-	c.trafficNotStarted = util.NewCounter(c.pair.Source.Namespace, c.pair.TrafficProfile, trafficNotStartedStr, "traffic not started", labelMap)
+	c.trafficNotStarted = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, trafficNotStartedStr, "traffic not started", labelMap)
 	c.promRegistry.MustRegister(c.trafficNotStarted)
 	c.trafficNotStarted.Inc()
 }
