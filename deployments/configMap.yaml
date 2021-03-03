@@ -14,7 +14,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: net-bat-conf
+  name: net-bat-pairing
 data:
   net-bat-pairing.cfg: |
     {"type": "pod", "ns": "default", "name": "tgen-tapp-pod-a"}, 192.168.167.138, udp, primary network

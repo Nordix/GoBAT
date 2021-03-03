@@ -19,6 +19,7 @@ package tgc
 import (
 	"encoding/json"
 	"strings"
+	"sync"
 
 	"github.com/Nordix/GoBAT/pkg/tapp"
 	"github.com/Nordix/GoBAT/pkg/tgen"
@@ -45,6 +46,7 @@ type podTGC struct {
 	stopper              chan struct{}
 	promRegistry         *prometheus.Registry
 	udpServer            util.ServerImpl
+	mutex                *sync.Mutex
 }
 
 // TGController traffic gen controller
@@ -54,8 +56,11 @@ type TGController interface {
 }
 
 // NewPodTGController creates traffic gen controller for the pod
-func NewPodTGController(clientSet kubernetes.Interface, podName, nodeName, namespace string, readBufferSize *int, stopper chan struct{}, reg *prometheus.Registry) TGController {
-	return &podTGC{clientSet: clientSet, socketReadBufferSize: *readBufferSize, podName: podName, nodeName: nodeName, namespace: namespace, stopper: stopper, promRegistry: reg}
+func NewPodTGController(clientSet kubernetes.Interface, podName, nodeName, namespace string,
+	readBufferSize *int, stopper chan struct{}, reg *prometheus.Registry) TGController {
+	return &podTGC{clientSet: clientSet, socketReadBufferSize: *readBufferSize,
+		podName: podName, nodeName: nodeName, namespace: namespace,
+		stopper: stopper, promRegistry: reg, mutex: &sync.Mutex{}}
 }
 
 // StartTGC listen for relavant config maps and create pairing
@@ -68,7 +73,9 @@ func (tg *podTGC) StartTGC() {
 		AddFunc: func(obj interface{}) {
 			cm := obj.(*v1.ConfigMap)
 			switch cm.Name {
-			case "net-bat-conf":
+			case "net-bat-pairing":
+				tg.mutex.Lock()
+				defer tg.mutex.Unlock()
 				batPairs, err := handleAddNetBatConfigMap(cm, tg.namespace, tg.podName)
 				if err != nil {
 					logrus.Errorf("error parsing the net bat config map: %v", err)
@@ -91,6 +98,8 @@ func (tg *podTGC) StartTGC() {
 				logrus.Errorf("dpdk bat config not supported")
 				return
 			case "net-bat-profile":
+				tg.mutex.Lock()
+				defer tg.mutex.Unlock()
 				config, err := util.LoadConfig(cm)
 				logrus.Infof("the config values are %v", config)
 				if err != nil {
@@ -116,6 +125,8 @@ func (tg *podTGC) StartTGC() {
 			cm := newObj.(*v1.ConfigMap)
 			switch cm.Name {
 			case "net-bat-profile":
+				tg.mutex.Lock()
+				defer tg.mutex.Unlock()
 				config, err := util.LoadConfig(cm)
 				logrus.Infof("the config values are %v", config)
 				if err != nil {
@@ -123,13 +134,14 @@ func (tg *podTGC) StartTGC() {
 					return
 				}
 				tg.config = config
-				//TODO: should we update the traffic profile for the running traffic ?
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
 			cm := obj.(*v1.ConfigMap)
 			switch cm.Name {
-			case "net-bat-conf":
+			case "net-bat-pairing":
+				tg.mutex.Lock()
+				defer tg.mutex.Unlock()
 				tg.deleteNetBatTgenClients()
 				return
 			case "storage-bat-conf":
@@ -139,6 +151,8 @@ func (tg *podTGC) StartTGC() {
 				logrus.Errorf("dpdk bat config not supported")
 				return
 			case "net-bat-profile":
+				tg.mutex.Lock()
+				defer tg.mutex.Unlock()
 				tg.config = nil
 				if tg.udpServer != nil {
 					tg.udpServer.TearDownServer()
@@ -226,10 +240,11 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 		return nil, err
 	}
 	for _, line := range lines {
-		if line == "" {
+		pair := strings.TrimSpace(line)
+		if pair == "" || strings.HasPrefix(pair, "#") {
 			continue
 		}
-		elements := strings.Split(line, "},")
+		elements := strings.Split(pair, "},")
 		source := &util.Source{}
 		sourceStr := strings.TrimSpace(elements[0] + "}")
 		if err := json.Unmarshal([]byte(sourceStr), source); err != nil {
