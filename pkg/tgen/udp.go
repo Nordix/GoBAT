@@ -145,16 +145,16 @@ func (c *UDPClient) SocketRead(bufSize int) {
 				}
 				continue
 			}
-			logrus.Infof("%s-%s: message received seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
+			//logrus.Infof("%s-%s: message received seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.SourceIP, c.pair.DestinationIP, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
 			c.mutex.Lock()
 			_, exists := c.pair.PendingRequestsMap[msg.SequenceNumber]
 			if !exists {
 				c.mutex.Unlock()
 				// msg already timed out
-				logrus.Infof("%s-%s: ignoring message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
+				//logrus.Infof("%s-%s: ignoring message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.SourceIP, c.pair.DestinationIP, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
 				continue
 			}
-			logrus.Infof("%s-%s: processing message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
+			//logrus.Infof("%s-%s: processing message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.SourceIP, c.pair.DestinationIP, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
 			c.roundTrip.Add(float64(util.GetTimestampMicroSec() - msg.SendTimeStamp))
 			c.packetReceived.Inc()
 			delete(c.pair.PendingRequestsMap, msg.SequenceNumber)
@@ -170,8 +170,8 @@ func (c *UDPClient) SocketRead(bufSize int) {
 // HandleTimeouts handles the message timeouts
 func (c *UDPClient) HandleTimeouts(config util.Config) {
 	sleepDuration := time.Duration(int64((float64(2.5) / float64(config.GetUDPPacketTimeout())) * float64(time.Second)))
-	logrus.Infof("udp packet time out: %d", config.GetUDPPacketTimeout())
-	logrus.Infof("tick at %s", time.Duration(int64((float64(1)/float64(config.GetUDPPacketTimeout()))*float64(time.Second))))
+	//logrus.Infof("udp packet time out: %d", config.GetUDPPacketTimeout())
+	//logrus.Infof("tick at %s", time.Duration(int64((float64(1)/float64(config.GetUDPPacketTimeout()))*float64(time.Second))))
 	packetTimeoutinMicros := int64(util.SecToMicroSec(config.GetUDPPacketTimeout()))
 	var seq int64 = 1
 	for {
@@ -185,7 +185,7 @@ func (c *UDPClient) HandleTimeouts(config util.Config) {
 			if exists {
 				now := util.GetTimestampMicroSec()
 				if (now - sendTimeStamp) > packetTimeoutinMicros {
-					logrus.Infof("%s-%s: seq: %d, packet timed out: now %d- sendtime %d- timeout %d", c.pair.Source.Name, c.pair.Destination, seq, now, sendTimeStamp, packetTimeoutinMicros)
+					//logrus.Infof("%s-%s: seq: %d, packet timed out: now %d- sendtime %d- timeout %d", c.pair.SourceIP, c.pair.DestinationIP, seq, now, sendTimeStamp, packetTimeoutinMicros)
 					c.packetDropped.Inc()
 					delete(c.pair.PendingRequestsMap, seq)
 					c.mutex.Unlock()
@@ -262,7 +262,7 @@ func (c *UDPClient) StartPackets(config util.Config) {
 				continue
 			}
 			c.packetSent.Inc()
-			logrus.Infof("%s-%s: message sent seq: %d, sendtimestamp: %d", c.pair.Source.Name, c.pair.Destination, c.packetSequence, sendTimeStamp)
+			//logrus.Infof("%s-%s: message sent seq: %d, sendtimestamp: %d", c.pair.SourceIP, c.pair.DestinationIP, c.packetSequence, sendTimeStamp)
 		}
 		/* Sleep for approx. one send interval */
 		time.Sleep(util.MicroSecToDuration(interval))
