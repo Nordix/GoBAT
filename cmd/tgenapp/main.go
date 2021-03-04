@@ -46,6 +46,7 @@ const (
 func main() {
 
 	readBufferSize := flag.Int("readbufsize", 1000, "socket read buffer size")
+	promPort := flag.Int("promport", 2212, "prometheus http endpoint port number")
 	flag.Parse()
 
 	sigs := make(chan os.Signal, 1)
@@ -84,7 +85,7 @@ func main() {
 	}
 
 	reg := prometheus.NewRegistry()
-	go util.RegisterPromHandler(reg)
+	go util.RegisterPromHandler(*promPort, reg)
 
 	// creates the in-cluster config
 	clientSet := getClient()

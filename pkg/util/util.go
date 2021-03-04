@@ -37,8 +37,6 @@ const (
 	MaxBufferSize = 65535
 	// Port server port
 	Port = 8890
-	// PromPort prometheus metric http endpoint port
-	PromPort = 2212
 )
 
 // Source represents source of the BatPair
@@ -72,7 +70,6 @@ type Message struct {
 	SequenceNumber   int64
 	SendTimeStamp    int64
 	RespondTimeStamp int64
-	PacketLength     int
 }
 
 // Server struct used by protocol server
@@ -98,8 +95,8 @@ type ClientImpl interface {
 }
 
 // NewMessage creates a new message
-func NewMessage(packetLength int, sequence, sendTimeStamp int64) *Message {
-	return &Message{SequenceNumber: sequence, SendTimeStamp: sendTimeStamp, RespondTimeStamp: 0, PacketLength: packetLength}
+func NewMessage(sequence, sendTimeStamp int64) *Message {
+	return &Message{SequenceNumber: sequence, SendTimeStamp: sendTimeStamp, RespondTimeStamp: 0}
 }
 
 // GetPaddingPayload get payload for the given length
@@ -113,7 +110,7 @@ func GetPaddingPayload(payloadSize int) ([]byte, error) {
 
 // GetMessageHeaderLength get message header length
 func GetMessageHeaderLength() (int, error) {
-	msg := Message{SequenceNumber: 0, SendTimeStamp: 0, RespondTimeStamp: 0, PacketLength: 0}
+	msg := Message{SequenceNumber: 0, SendTimeStamp: 0, RespondTimeStamp: 0}
 	byteArr, err := msgpack.Marshal(msg)
 	if err != nil {
 		return -1, err
@@ -149,8 +146,8 @@ func NewCounter(namespace, subsystem, name, help string, labelMap map[string]str
 }
 
 // RegisterPromHandler register prometheus http handler
-func RegisterPromHandler(reg *prometheus.Registry) {
+func RegisterPromHandler(promPort int, reg *prometheus.Registry) {
 	handler := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
 	http.Handle("/metrics", handler)
-	http.ListenAndServe(":"+strconv.Itoa(PromPort), nil)
+	http.ListenAndServe(":"+strconv.Itoa(promPort), nil)
 }

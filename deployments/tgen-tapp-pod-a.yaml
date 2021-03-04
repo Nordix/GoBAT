@@ -33,6 +33,7 @@ spec:
     - tgenapp
     args:
     - -readbufsize=9000
+    - -promport=2212
     env:
       - name: NODE_NAME
         valueFrom:

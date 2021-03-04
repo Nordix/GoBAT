@@ -80,22 +80,20 @@ func (c *UDPClient) SetupConnection(config util.Config) error {
 	labelMap := make(map[string]string)
 	labelMap["destination"] = c.pair.Destination
 	labelMap["scenario"] = c.pair.TrafficScenario
-	source, err := json.Marshal(c.pair.Source)
-	if err != nil {
-		c.updateTrafficNotStarted(labelMap)
-		return err
-	}
+	source, _ := json.Marshal(c.pair.Source)
 	labelMap["source"] = string(source)
+	c.trafficNotStarted = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, trafficNotStartedStr, "traffic not started", labelMap)
+	c.promRegistry.MustRegister(c.trafficNotStarted)
 	raddr, err := net.ResolveUDPAddr("udp", c.pair.Destination+":"+strconv.Itoa(util.Port))
 	if err != nil {
-		c.updateTrafficNotStarted(labelMap)
+		c.trafficNotStarted.Inc()
 		return err
 	}
 	laddr, err := net.ResolveUDPAddr("udp", c.pair.Source.SourceIP+":0")
 	logrus.Infof("udp local address: %s, server address: %s connecting ", laddr.String(), raddr.String())
 	conn, err := net.DialUDP("udp", laddr, raddr)
 	if err != nil {
-		c.updateTrafficNotStarted(labelMap)
+		c.trafficNotStarted.Inc()
 		return err
 	}
 	// set read buffer size into 512KB
@@ -114,12 +112,6 @@ func (c *UDPClient) SetupConnection(config util.Config) error {
 	return nil
 }
 
-func (c *UDPClient) updateTrafficNotStarted(labelMap map[string]string) {
-	c.trafficNotStarted = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, trafficNotStartedStr, "traffic not started", labelMap)
-	c.promRegistry.MustRegister(c.trafficNotStarted)
-	c.trafficNotStarted.Inc()
-}
-
 // SocketRead read from udp client socket
 func (c *UDPClient) SocketRead(bufSize int) {
 	logrus.Infof("udp tgen client read buffer size %d", bufSize)
@@ -127,7 +119,7 @@ func (c *UDPClient) SocketRead(bufSize int) {
 	for {
 		size, _, err := c.connection.ReadFromUDP(receivedByteArr)
 		if err != nil {
-			logrus.Errorf("error reading message from the udp client connection %v: err %v", c.connection, err)
+			logrus.Debugf("error reading message from the udp client connection %v: err %v", c.connection, err)
 			if c.stop == true {
 				c.isStopped.Done()
 				return
@@ -169,9 +161,10 @@ func (c *UDPClient) SocketRead(bufSize int) {
 
 // HandleTimeouts handles the message timeouts
 func (c *UDPClient) HandleTimeouts(config util.Config) {
-	sleepDuration := time.Duration(int64((float64(2.5) / float64(config.GetUDPPacketTimeout())) * float64(time.Second)))
-	logrus.Infof("udp packet time out: %d", config.GetUDPPacketTimeout())
-	packetTimeoutinMicros := int64(util.SecToMicroSec(config.GetUDPPacketTimeout()))
+	packetTimeout := config.GetUDPPacketTimeout()
+	logrus.Infof("udp packet time out: %d", packetTimeout)
+	sleepDuration := time.Duration(int64((float64(2.5) / float64(packetTimeout)) * float64(time.Second)))
+	packetTimeoutinMicros := int64(util.SecToMicroSec(packetTimeout))
 	var seq int64 = 1
 	for {
 		if c.stop == true {
@@ -208,14 +201,22 @@ func (c *UDPClient) HandleTimeouts(config util.Config) {
 // StartPackets start sending packet as per the udp configuration
 func (c *UDPClient) StartPackets(config util.Config) {
 	packetSize := config.GetUDPPacketSize()
-	payload, err := util.GetPaddingPayload(packetSize - c.msgHeaderLength)
+	payLoadSize := packetSize - c.msgHeaderLength
+	if payLoadSize < 0 {
+		c.trafficNotStarted.Inc()
+		logrus.Errorf("udp packet size is too less, recongfigure it with more than %d bytes", c.msgHeaderLength)
+		return
+	}
+	payload, err := util.GetPaddingPayload(payLoadSize)
 	if err != nil {
+		c.trafficNotStarted.Inc()
 		logrus.Errorf("error in getting payload for udp pair %v", *c.pair)
 		return
 	}
-	baseMsg := util.NewMessage(packetSize, 0, 0)
+	baseMsg := util.NewMessage(0, 0)
 	baseByteArr, err := msgpack.Marshal(&baseMsg)
 	if err != nil {
+		c.trafficNotStarted.Inc()
 		logrus.Errorf("error in encoding the base udp client message %v", err)
 		return
 	}
@@ -282,6 +283,7 @@ func (c *UDPClient) TearDownConnection() {
 	c.stop = true
 	c.connection.Close()
 	c.isStopped.Wait()
+	c.promRegistry.Unregister(c.trafficNotStarted)
 	c.promRegistry.Unregister(c.packetSent)
 	c.promRegistry.Unregister(c.packetSendFailed)
 	c.promRegistry.Unregister(c.packetReceived)
