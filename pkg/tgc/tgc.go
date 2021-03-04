@@ -45,7 +45,7 @@ type podTGC struct {
 	netBatPairs          []util.BatPair
 	stopper              chan struct{}
 	promRegistry         *prometheus.Registry
-	servers              map[string]util.ServerImpl
+	serversMap           map[string][]util.ServerImpl
 	mutex                *sync.Mutex
 }
 
@@ -61,7 +61,7 @@ func NewPodTGController(clientSet kubernetes.Interface, podName, nodeName, names
 	return &podTGC{clientSet: clientSet, socketReadBufferSize: *readBufferSize,
 		podName: podName, nodeName: nodeName, namespace: namespace,
 		stopper: stopper, promRegistry: reg, mutex: &sync.Mutex{},
-		servers: make(map[string]util.ServerImpl)}
+		serversMap: make(map[string][]util.ServerImpl)}
 }
 
 // StartTGC listen for relavant config maps and create pairing
@@ -96,12 +96,12 @@ func (tg *podTGC) StartTGC() {
 				}
 				tg.config = config
 				for _, protocol := range config.GetProfiles() {
-					server, err := tapp.NewServer(tg.socketReadBufferSize, util.Port, protocol, tg.config)
+					servers, err := tapp.NewServer(tg.socketReadBufferSize, util.Port, protocol, tg.config)
 					if err != nil {
 						logrus.Errorf("server for %s, creation failed: err %v", protocol, err)
 						continue
 					}
-					tg.servers[protocol] = server
+					tg.serversMap[protocol] = servers
 				}
 				if tg.netBatPairs != nil {
 					logrus.Infof("net bat profile is set. starting tgen clients")
@@ -170,8 +170,10 @@ func (tg *podTGC) StopTGC() {
 }
 
 func (tg *podTGC) stopServers() {
-	for _, server := range tg.servers {
-		server.TearDownServer()
+	for _, servers := range tg.serversMap {
+		for _, server := range servers {
+			server.TearDownServer()
+		}
 	}
 }
 

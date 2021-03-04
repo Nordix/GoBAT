@@ -92,7 +92,7 @@ func (c *UDPClient) SetupConnection(config util.Config) error {
 		return err
 	}
 	laddr, err := net.ResolveUDPAddr("udp", c.pair.Source.SourceIP+":0")
-	logrus.Infof("local address: %s, server address: %s connecting ", laddr.String(), raddr.String())
+	logrus.Infof("udp local address: %s, server address: %s connecting ", laddr.String(), raddr.String())
 	conn, err := net.DialUDP("udp", laddr, raddr)
 	if err != nil {
 		c.updateTrafficNotStarted(labelMap)
@@ -122,12 +122,12 @@ func (c *UDPClient) updateTrafficNotStarted(labelMap map[string]string) {
 
 // SocketRead read from udp client socket
 func (c *UDPClient) SocketRead(bufSize int) {
-	logrus.Infof("tgen client read buffer size %d", bufSize)
+	logrus.Infof("udp tgen client read buffer size %d", bufSize)
 	receivedByteArr := make([]byte, bufSize)
 	for {
 		size, _, err := c.connection.ReadFromUDP(receivedByteArr)
 		if err != nil {
-			logrus.Errorf("error reading message from the client connection %v: err %v", c.connection, err)
+			logrus.Errorf("error reading message from the udp client connection %v: err %v", c.connection, err)
 			if c.stop == true {
 				c.isStopped.Done()
 				return
@@ -138,7 +138,7 @@ func (c *UDPClient) SocketRead(bufSize int) {
 			var msg util.Message
 			err := msgpack.Unmarshal(receivedByteArr[:c.msgHeaderLength], &msg)
 			if err != nil {
-				logrus.Errorf("error in decoding the packet at client err %v", err)
+				logrus.Errorf("error in decoding the packet at udp client err %v", err)
 				if c.stop == true {
 					c.isStopped.Done()
 					return
@@ -210,13 +210,13 @@ func (c *UDPClient) StartPackets(config util.Config) {
 	packetSize := config.GetUDPPacketSize()
 	payload, err := util.GetPaddingPayload(packetSize - c.msgHeaderLength)
 	if err != nil {
-		logrus.Errorf("error in getting payload for pair %v", *c.pair)
+		logrus.Errorf("error in getting payload for udp pair %v", *c.pair)
 		return
 	}
 	baseMsg := util.NewMessage(packetSize, 0, 0)
 	baseByteArr, err := msgpack.Marshal(&baseMsg)
 	if err != nil {
-		logrus.Errorf("error in encoding the base client message %v", err)
+		logrus.Errorf("error in encoding the base udp client message %v", err)
 		return
 	}
 	baseByteArr = append(baseByteArr, payload...)
@@ -236,7 +236,7 @@ func (c *UDPClient) StartPackets(config util.Config) {
 			newMsgByteArr, err := msgpack.Marshal(&baseMsg)
 			if err != nil {
 				c.packetSendFailed.Inc()
-				logrus.Errorf("error in encoding the client message %v", err)
+				logrus.Errorf("error in encoding the udp client message %v", err)
 				if c.stop == true {
 					c.isStopped.Done()
 					return
@@ -253,7 +253,7 @@ func (c *UDPClient) StartPackets(config util.Config) {
 				delete(c.pair.PendingRequestsMap, c.packetSequence)
 				c.mutex.Unlock()
 				c.packetSendFailed.Inc()
-				logrus.Errorf("error in writing message %v to client connection: err %v", baseMsg, err)
+				logrus.Errorf("error in writing message %v to udp client connection: err %v", baseMsg, err)
 				if c.stop == true {
 					c.isStopped.Done()
 					return
@@ -287,5 +287,5 @@ func (c *UDPClient) TearDownConnection() {
 	c.promRegistry.Unregister(c.packetReceived)
 	c.promRegistry.Unregister(c.packetDropped)
 	c.promRegistry.Unregister(c.roundTrip)
-	logrus.Infof("client connection %s-%s is stopped", c.connection.LocalAddr().String(), c.connection.RemoteAddr().String())
+	logrus.Infof("udp client connection %s-%s is stopped", c.connection.LocalAddr().String(), c.connection.RemoteAddr().String())
 }

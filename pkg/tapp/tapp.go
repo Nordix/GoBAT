@@ -21,19 +21,28 @@ import (
 	"fmt"
 
 	"github.com/Nordix/GoBAT/pkg/util"
+	netlib "github.com/openshift/app-netutil/lib/v1alpha"
 )
 
 // NewServer get the server implementation for the given protocol
-func NewServer(readBufferSize, port int, protocol string, config util.Config) (util.ServerImpl, error) {
+func NewServer(readBufferSize, port int, protocol string, config util.Config) ([]util.ServerImpl, error) {
+	servers := make([]util.ServerImpl, 0)
+	ifaceResponse, err := netlib.GetInterfaces()
+	if err != nil {
+		return nil, err
+	}
 	switch protocol {
 	case util.ProtocolUDP:
-		udpServer := NewUDPServer(port)
-		err := udpServer.SetupServerConnection(config)
-		if err != nil {
-			return nil, err
+		for _, iface := range ifaceResponse.Interface {
+			udpServer := NewUDPServer(iface.NetworkStatus.IPs[0], port)
+			err := udpServer.SetupServerConnection(config)
+			if err != nil {
+				return nil, err
+			}
+			go udpServer.ReadFromSocket(readBufferSize)
+			servers = append(servers, udpServer)
 		}
-		go udpServer.ReadFromSocket(readBufferSize)
-		return udpServer, nil
+		return servers, nil
 	case util.ProtocolHTTP:
 		return nil, errors.New("http server not supported")
 	default:

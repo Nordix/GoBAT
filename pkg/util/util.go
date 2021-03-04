@@ -77,7 +77,8 @@ type Message struct {
 
 // Server struct used by protocol server
 type Server struct {
-	Port int
+	IPAddress string
+	Port      int
 }
 
 // ServerImpl methods to be implemented by a server
