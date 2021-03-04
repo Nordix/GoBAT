@@ -18,7 +18,7 @@ RUN apk add --update --virtual build-dependencies build-base linux-headers && \
     cd /usr/src/tgenapp && \
     make
 
-FROM golang:1.15-alpine
+FROM alpine:3.11
 RUN apk add --update \
     curl net-tools tcpdump bash \
     && rm -rf /var/cache/apk/*

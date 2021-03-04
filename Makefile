@@ -25,4 +25,4 @@ vendor :
 	go mod tidy && go mod vendor
 
 clean :
-	rm -rf $(CURDIR)/.gopath && rm -rf $(CURDIR)/bin
+	rm -rf $(CURDIR)/.gopath && rm -rf $(CURDIR)/bin && rm -rf $(CURDIR)/vendor
