@@ -24,9 +24,15 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
+const (
+	defaultUDPPacketSize    = 1000
+	defaultUDPPacketTimeout = 5
+	defaultUDPSendRate      = 500
+	defaultHTTPSendRate     = 100
+)
+
 type config struct {
-	udp              bool
-	http             bool
+	profiles         []string
 	udpSendRate      int
 	udpPacketSize    int
 	udpPacketTimeout int
@@ -37,8 +43,7 @@ type config struct {
 
 // Config interface
 type Config interface {
-	HasUDPProfile() bool
-	HasHTTPProfile() bool
+	GetProfiles() []string
 	GetUDPSendRate() int
 	GetUDPPacketSize() int
 	GetUDPPacketTimeout() int
@@ -49,7 +54,9 @@ type Config interface {
 
 // LoadConfig parse the config map and load the config struct
 func LoadConfig(cm *v1.ConfigMap) (Config, error) {
-	var c config
+	c := config{udpSendRate: defaultUDPSendRate, udpPacketSize: defaultUDPPacketSize,
+		udpPacketTimeout: defaultUDPPacketTimeout, httpSendRate: defaultHTTPSendRate}
+	c.profiles = make([]string, 0)
 	yamlMap := make(map[string]map[string]string)
 	err := yaml.Unmarshal([]byte(cm.Data["net-bat-profiles.cfg"]), &yamlMap)
 	if err != nil {
@@ -58,7 +65,7 @@ func LoadConfig(cm *v1.ConfigMap) (Config, error) {
 
 	// Parse UDP profile
 	if udpEntry, ok := yamlMap["udp"]; ok {
-		c.udp = true
+		c.profiles = append(c.profiles, "udp")
 		if val, ok := udpEntry["send-rate"]; ok {
 			c.udpSendRate, err = parseIntValue(val)
 			if err != nil {
@@ -83,7 +90,7 @@ func LoadConfig(cm *v1.ConfigMap) (Config, error) {
 
 	// Parse HTTP Profile
 	if httpEntry, ok := yamlMap["http"]; ok {
-		c.http = true
+		c.profiles = append(c.profiles, "http")
 		if val, ok := httpEntry["send-rate"]; ok {
 			c.httpSendRate, err = parseIntValue(val)
 			if err != nil {
@@ -103,12 +110,8 @@ func LoadConfig(cm *v1.ConfigMap) (Config, error) {
 	return &c, nil
 }
 
-func (c *config) HasUDPProfile() bool {
-	return c.udp
-}
-
-func (c *config) HasHTTPProfile() bool {
-	return c.http
+func (c *config) GetProfiles() []string {
+	return c.profiles
 }
 
 func (c *config) GetUDPSendRate() int {

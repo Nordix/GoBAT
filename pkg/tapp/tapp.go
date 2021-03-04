@@ -24,10 +24,16 @@ import (
 )
 
 // NewServer get the server implementation for the given protocol
-func NewServer(port int, protocol string) (util.ServerImpl, error) {
+func NewServer(readBufferSize, port int, protocol string, config util.Config) (util.ServerImpl, error) {
 	switch protocol {
 	case util.ProtocolUDP:
-		return NewUDPServer(port), nil
+		udpServer := NewUDPServer(port)
+		err := udpServer.SetupServerConnection(config)
+		if err != nil {
+			return nil, err
+		}
+		go udpServer.ReadFromSocket(readBufferSize)
+		return udpServer, nil
 	case util.ProtocolHTTP:
 		return nil, errors.New("http server not supported")
 	default:

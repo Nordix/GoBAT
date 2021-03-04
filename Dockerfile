@@ -20,7 +20,7 @@ RUN apk add --update --virtual build-dependencies build-base linux-headers && \
 
 FROM golang:1.15-alpine
 RUN apk add --update \
-    curl \
+    curl net-tools tcpdump bash \
     && rm -rf /var/cache/apk/*
 COPY --from=builder /usr/src/tgenapp/bin/tgenapp /usr/bin/
 

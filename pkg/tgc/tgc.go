@@ -45,7 +45,7 @@ type podTGC struct {
 	netBatPairs          []util.BatPair
 	stopper              chan struct{}
 	promRegistry         *prometheus.Registry
-	udpServer            util.ServerImpl
+	servers              map[string]util.ServerImpl
 	mutex                *sync.Mutex
 }
 
@@ -60,7 +60,8 @@ func NewPodTGController(clientSet kubernetes.Interface, podName, nodeName, names
 	readBufferSize *int, stopper chan struct{}, reg *prometheus.Registry) TGController {
 	return &podTGC{clientSet: clientSet, socketReadBufferSize: *readBufferSize,
 		podName: podName, nodeName: nodeName, namespace: namespace,
-		stopper: stopper, promRegistry: reg, mutex: &sync.Mutex{}}
+		stopper: stopper, promRegistry: reg, mutex: &sync.Mutex{},
+		servers: make(map[string]util.ServerImpl)}
 }
 
 // StartTGC listen for relavant config maps and create pairing
@@ -76,20 +77,7 @@ func (tg *podTGC) StartTGC() {
 			case "net-bat-pairing":
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
-				batPairs, err := handleAddNetBatConfigMap(cm, tg.namespace, tg.podName)
-				if err != nil {
-					logrus.Errorf("error parsing the net bat config map: %v", err)
-					return
-				}
-				tg.netBatPairs = batPairs
-				if tg.config != nil {
-					for _, batPair := range tg.netBatPairs {
-						logrus.Infof("bat pair %v, %s, %s, %s", *batPair.Source, batPair.Destination, batPair.TrafficProfile, batPair.TrafficScenario)
-					}
-					tg.createNetBatTgenClients()
-				} else {
-					logrus.Infof("net bat profile is not configured yet, returning")
-				}
+				tg.handleNetBatPairingAddEvent(cm)
 				return
 			case "storage-bat-conf":
 				logrus.Errorf("storage bat config not supported")
@@ -101,22 +89,25 @@ func (tg *podTGC) StartTGC() {
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
 				config, err := util.LoadConfig(cm)
-				logrus.Infof("the config values are %v", config)
+				logrus.Infof("traffic profile: %v", config)
 				if err != nil {
 					logrus.Errorf("error processing configmap %v: error %v", cm, err)
 					return
 				}
 				tg.config = config
-				if config.HasUDPProfile() {
-					tappUDPServer, err := tg.startTappServer()
+				for _, protocol := range config.GetProfiles() {
+					server, err := tapp.NewServer(tg.socketReadBufferSize, util.Port, protocol, tg.config)
 					if err != nil {
-						logrus.Errorf("udp server connection creation failed: err %v", err)
-						return
+						logrus.Errorf("server for %s, creation failed: err %v", protocol, err)
+						continue
 					}
-					tg.udpServer = tappUDPServer
+					tg.servers[protocol] = server
 				}
 				if tg.netBatPairs != nil {
-					logrus.Infof("net bat profile is set. starting tgen clients for pair: %v", tg.netBatPairs)
+					logrus.Infof("net bat profile is set. starting tgen clients")
+					for _, batPair := range tg.netBatPairs {
+						logrus.Infof("bat pair %v, %s, %s, %s", *batPair.Source, batPair.Destination, batPair.TrafficProfile, batPair.TrafficScenario)
+					}
 					tg.createNetBatTgenClients()
 				}
 			}
@@ -124,16 +115,25 @@ func (tg *podTGC) StartTGC() {
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			cm := newObj.(*v1.ConfigMap)
 			switch cm.Name {
+			case "net-bat-pairing":
+				tg.mutex.Lock()
+				defer tg.mutex.Unlock()
+				// reconfigure the clients with new pairing config
+				tg.deleteNetBatTgenClients()
+				tg.handleNetBatPairingAddEvent(cm)
+				return
 			case "net-bat-profile":
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
 				config, err := util.LoadConfig(cm)
-				logrus.Infof("the config values are %v", config)
+				logrus.Infof("updated traffic profile: %v", config)
 				if err != nil {
 					logrus.Errorf("error processing configmap %v: error %v", cm, err)
 					return
 				}
 				tg.config = config
+				// restart the client with new config settings
+				tg.restartNetBatTgenClients()
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
@@ -153,10 +153,8 @@ func (tg *podTGC) StartTGC() {
 			case "net-bat-profile":
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
+				tg.stopServers()
 				tg.config = nil
-				if tg.udpServer != nil {
-					tg.udpServer.TearDownServer()
-				}
 				return
 			}
 		},
@@ -168,9 +166,40 @@ func (tg *podTGC) StartTGC() {
 func (tg *podTGC) StopTGC() {
 	close(tg.stopper)
 	tg.deleteNetBatTgenClients()
-	if tg.udpServer != nil {
-		tg.udpServer.TearDownServer()
+	tg.stopServers()
+}
+
+func (tg *podTGC) stopServers() {
+	for _, server := range tg.servers {
+		server.TearDownServer()
 	}
+}
+
+func (tg *podTGC) handleNetBatPairingAddEvent(cm *v1.ConfigMap) {
+	batPairs, err := handleAddNetBatConfigMap(cm, tg.namespace, tg.podName)
+	if err != nil {
+		logrus.Errorf("error parsing the net bat config map: %v", err)
+		return
+	}
+	tg.netBatPairs = batPairs
+	if tg.config != nil {
+		for _, batPair := range tg.netBatPairs {
+			logrus.Infof("bat pair %v, %s, %s, %s", *batPair.Source, batPair.Destination, batPair.TrafficProfile, batPair.TrafficScenario)
+		}
+		tg.createNetBatTgenClients()
+	} else {
+		logrus.Infof("net bat profile is not configured yet, returning")
+	}
+}
+
+func (tg *podTGC) restartNetBatTgenClients() {
+	if tg.netBatPairs == nil {
+		return
+	}
+	for _, pair := range tg.netBatPairs {
+		pair.ClientConnection.TearDownConnection()
+	}
+	tg.createNetBatTgenClients()
 }
 
 func (tg *podTGC) createNetBatTgenClients() {
@@ -204,20 +233,6 @@ func (tg *podTGC) deleteNetBatTgenClients() {
 		pair.ClientConnection.TearDownConnection()
 	}
 	tg.netBatPairs = nil
-}
-
-func (tg *podTGC) startTappServer() (util.ServerImpl, error) {
-	server, err := tapp.NewServer(util.Port, util.ProtocolUDP)
-	if err != nil {
-		return nil, err
-	}
-	err = server.SetupServerConnection(tg.config)
-	if err != nil {
-		return nil, err
-	}
-	go server.ReadFromSocket(tg.socketReadBufferSize)
-
-	return server, nil
 }
 
 func handleAddNetBatConfigMap(cm *v1.ConfigMap, namespace, podName string) ([]util.BatPair, error) {
