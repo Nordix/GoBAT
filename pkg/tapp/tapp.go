@@ -33,13 +33,20 @@ func NewServer(readBufferSize, port int, protocol string, config util.Config) ([
 	}
 	switch protocol {
 	case util.ProtocolUDP:
-		for _, iface := range ifaceResponse.Interface {
-			udpServer := NewUDPServer(iface.NetworkStatus.IPs[0], port)
-			err := udpServer.SetupServerConnection(config)
+		if len(ifaceResponse.Interface) > 0 {
+			for _, iface := range ifaceResponse.Interface {
+				udpServer, err := createUDPServer(iface.NetworkStatus.IPs[0], readBufferSize, port, config)
+				if err != nil {
+					return nil, err
+				}
+				servers = append(servers, udpServer)
+			}
+		} else {
+			// There is only one interface on the pod, so create tapp server with empty ip address
+			udpServer, err := createUDPServer("", readBufferSize, port, config)
 			if err != nil {
 				return nil, err
 			}
-			go udpServer.ReadFromSocket(readBufferSize)
 			servers = append(servers, udpServer)
 		}
 		return servers, nil
@@ -48,4 +55,14 @@ func NewServer(readBufferSize, port int, protocol string, config util.Config) ([
 	default:
 		return nil, fmt.Errorf("unknown protocol %s", protocol)
 	}
+}
+
+func createUDPServer(ipAddress string, readBufferSize, port int, config util.Config) (util.ServerImpl, error) {
+	udpServer := NewUDPServer(ipAddress, port)
+	err := udpServer.SetupServerConnection(config)
+	if err != nil {
+		return nil, err
+	}
+	go udpServer.ReadFromSocket(readBufferSize)
+	return udpServer, nil
 }
