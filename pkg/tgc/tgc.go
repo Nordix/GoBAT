@@ -18,8 +18,10 @@ package tgc
 
 import (
 	"encoding/json"
+	"math/rand"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Nordix/GoBAT/pkg/tapp"
 	"github.com/Nordix/GoBAT/pkg/tgen"
@@ -256,6 +258,8 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 	if err != nil {
 		return nil, err
 	}
+	pairMap := make(map[string][]util.BatPair)
+	rand.Seed(time.Now().Unix())
 	for _, line := range lines {
 		pair := strings.TrimSpace(line)
 		if pair == "" || strings.HasPrefix(pair, "#") {
@@ -301,7 +305,20 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 			source.SourceIP = primaryIfaceIPAddress
 		}
 		elements = trimSlice(strings.Split(elements[1], ","))
-		pairs = append(pairs, util.BatPair{Source: source, Destination: elements[0], TrafficProfile: elements[1], TrafficScenario: elements[2]})
+		batPair := util.BatPair{Source: source, Destination: elements[0], TrafficProfile: elements[1], TrafficScenario: elements[2]}
+		if batPairs, ok := pairMap[sourceStr]; ok {
+			pairMap[sourceStr] = append(batPairs, batPair)
+		} else {
+			pairMap[sourceStr] = []util.BatPair{batPair}
+		}
+	}
+	for _, tempPairs := range pairMap {
+		if len(tempPairs) == 1 {
+			pairs = append(pairs, tempPairs[0])
+		} else {
+			// pick up a random destination for the pair
+			pairs = append(pairs, tempPairs[rand.Intn(len(tempPairs))])
+		}
 	}
 	return pairs, nil
 }
