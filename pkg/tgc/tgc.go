@@ -270,11 +270,17 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 		}
 		pairType := source.Type
 		pairName := source.Name
+		isPod := strings.EqualFold(pairType, "pod")
+		isDeployment := strings.EqualFold(pairType, "deployment")
+		isDaemonSet := strings.EqualFold(pairType, "daemonset")
 		if source.Namespace != namespace {
 			continue
-		} else if pairType == "pod" && pairName != podName {
+		} else if !isPod && !isDeployment && !isDaemonSet {
+			logrus.Errorf("unsupported source type in the pair %s, ignoring", pair)
 			continue
-		} else if pairType == "deployment" && !strings.HasPrefix(podName, pairName) {
+		} else if isPod && pairName != podName {
+			continue
+		} else if (isDeployment || isDaemonSet) && !strings.HasPrefix(podName, pairName) {
 			continue
 		}
 		var primaryIfaceIPAddress string
