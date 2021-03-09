@@ -84,12 +84,24 @@ func (c *UDPClient) SetupConnection(config util.Config) error {
 	labelMap["source"] = string(source)
 	c.trafficNotStarted = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, trafficNotStartedStr, "traffic not started", labelMap)
 	c.promRegistry.MustRegister(c.trafficNotStarted)
-	raddr, err := net.ResolveUDPAddr("udp", c.pair.Destination+":"+strconv.Itoa(util.Port))
+	var destAddress string
+	if util.IsIPv6(c.pair.Destination) {
+		destAddress = "[" + c.pair.Destination + "]:" + strconv.Itoa(util.Port)
+	} else {
+		destAddress = c.pair.Destination + ":" + strconv.Itoa(util.Port)
+	}
+	raddr, err := net.ResolveUDPAddr("udp", destAddress)
 	if err != nil {
 		c.trafficNotStarted.Inc()
 		return err
 	}
-	laddr, err := net.ResolveUDPAddr("udp", c.pair.Source.SourceIP+":0")
+	var srcAddress string
+	if util.IsIPv6(c.pair.Source.IP) {
+		srcAddress = "[" + c.pair.Source.IP + "]:0"
+	} else {
+		srcAddress = c.pair.Source.IP + ":0"
+	}
+	laddr, err := net.ResolveUDPAddr("udp", srcAddress)
 	logrus.Infof("udp local address: %s, server address: %s connecting ", laddr.String(), raddr.String())
 	conn, err := net.DialUDP("udp", laddr, raddr)
 	if err != nil {

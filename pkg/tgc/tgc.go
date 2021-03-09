@@ -290,19 +290,19 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 		var primaryIfaceIPAddress string
 		for _, iface := range ifaceResponse.Interface {
 			if source.Net != "" && iface.NetworkStatus.Name == namespace+"/"+source.Net {
-				source.SourceIP = iface.NetworkStatus.IPs[0]
+				source.IP = iface.NetworkStatus.IPs[0]
 				break
 			} else if source.Interface != "" && iface.NetworkStatus.Interface == source.Interface {
-				source.SourceIP = iface.NetworkStatus.IPs[0]
+				source.IP = iface.NetworkStatus.IPs[0]
 				break
 			}
 			if iface.NetworkStatus.Interface == "" {
 				primaryIfaceIPAddress = iface.NetworkStatus.IPs[0]
 			}
 		}
-		if source.SourceIP == "" {
+		if source.IP == "" {
 			// assign primary network eth0 interface ip address
-			source.SourceIP = primaryIfaceIPAddress
+			source.IP = primaryIfaceIPAddress
 		}
 		elements = trimSlice(strings.Split(elements[1], ","))
 		batPair := util.BatPair{Source: source, Destination: elements[0], TrafficProfile: elements[1], TrafficScenario: elements[2]}

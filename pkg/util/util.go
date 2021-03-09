@@ -17,8 +17,10 @@
 package util
 
 import (
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -46,7 +48,7 @@ type Source struct {
 	Name      string `json:"name"`
 	Net       string `json:"net,omitempty"`
 	Interface string `json:"interface,omitempty"`
-	SourceIP  string `json:"source_ip,omitempty"`
+	IP        string `json:"ip,omitempty"`
 }
 
 // Error error associated with pair
@@ -150,4 +152,10 @@ func RegisterPromHandler(promPort int, reg *prometheus.Registry) {
 	handler := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
 	http.Handle("/metrics", handler)
 	http.ListenAndServe(":"+strconv.Itoa(promPort), nil)
+}
+
+// IsIPv6 to check ipAddress is either ipv6 or not
+func IsIPv6(ipAddress string) bool {
+	ip := net.ParseIP(ipAddress)
+	return ip != nil && strings.Contains(ipAddress, ":")
 }
