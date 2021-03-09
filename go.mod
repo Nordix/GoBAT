@@ -3,9 +3,11 @@ module github.com/Nordix/GoBAT
 go 1.23
 
 require (
+	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/google/go-cmp v0.5.2 // indirect
 	github.com/google/uuid v1.1.2 // indirect
+	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.1.1-0.20201119153432-9d213757d22d
 	github.com/openshift/app-netutil v0.0.0-20210203214838-7a1305d414c3
 	github.com/prometheus/client_golang v1.9.0
 	github.com/sirupsen/logrus v1.7.0

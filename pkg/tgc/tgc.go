@@ -18,6 +18,7 @@ package tgc
 
 import (
 	"encoding/json"
+	"errors"
 	"math/rand"
 	"strings"
 	"sync"
@@ -26,7 +27,6 @@ import (
 	"github.com/Nordix/GoBAT/pkg/tapp"
 	"github.com/Nordix/GoBAT/pkg/tgen"
 	"github.com/Nordix/GoBAT/pkg/util"
-	netlib "github.com/openshift/app-netutil/lib/v1alpha"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -97,8 +97,13 @@ func (tg *podTGC) StartTGC() {
 					return
 				}
 				tg.config = config
+				ifNameAddressMap, err := util.GetNetInterfaces()
+				if err != nil {
+					logrus.Errorf("error retrieving pod interfaces: error %v", err)
+					return
+				}
 				for _, protocol := range config.GetProfiles() {
-					servers, err := tapp.NewServer(tg.socketReadBufferSize, util.Port, protocol, tg.config)
+					servers, err := tapp.NewServer(ifNameAddressMap, tg.socketReadBufferSize, util.Port, protocol, tg.config)
 					if err != nil {
 						logrus.Errorf("server for %s, creation failed: err %v", protocol, err)
 						continue
@@ -254,9 +259,34 @@ func handleAddNetBatConfigMap(cm *v1.ConfigMap, namespace, podName string) ([]ut
 func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.BatPair, error) {
 	lines := strings.Split(string(pairingStr), "\n")
 	pairs := make([]util.BatPair, 0)
-	ifaceResponse, err := netlib.GetInterfaces()
+	ifaceResponse, err := util.GetInterfaces()
 	if err != nil {
 		return nil, err
+	}
+	ifNameAddressMap, err := util.GetNetInterfaces()
+	if err != nil {
+		return nil, err
+	}
+	var primaryIfaceIPAddress string
+	netIfNameMap := make(map[string]string)
+	for _, iface := range ifaceResponse.Interface {
+		if iface.NetworkStatus.Name != "" {
+			netIfNameMap[iface.NetworkStatus.Name] = iface.NetworkStatus.Interface
+		}
+		// both net name and interface are empty for primary interface
+		if iface.NetworkStatus.Name == "" && iface.NetworkStatus.Interface == "" {
+			// no dual stack as of now. revisit later.
+			if len(iface.NetworkStatus.IPs) > 0 {
+				primaryIfaceIPAddress = iface.NetworkStatus.IPs[0]
+			} else {
+				logrus.Errorf("no primary interface present in nw status, try retrieving it from eth0 interface")
+				if srcIfaceIPAddress, ok := ifNameAddressMap["eth0"]; ok {
+					primaryIfaceIPAddress = srcIfaceIPAddress
+				} else {
+					return nil, errors.New("no primary interface present")
+				}
+			}
+		}
 	}
 	pairMap := make(map[string][]util.BatPair)
 	rand.Seed(time.Now().Unix())
@@ -287,17 +317,16 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 		} else if (isDeployment || isDaemonSet) && !strings.HasPrefix(podName, pairName) {
 			continue
 		}
-		var primaryIfaceIPAddress string
-		for _, iface := range ifaceResponse.Interface {
-			if source.Net != "" && iface.NetworkStatus.Name == namespace+"/"+source.Net {
-				source.IP = iface.NetworkStatus.IPs[0]
-				break
-			} else if source.Interface != "" && iface.NetworkStatus.Interface == source.Interface {
-				source.IP = iface.NetworkStatus.IPs[0]
-				break
+		if source.Net != "" {
+			if srcIface, ok := netIfNameMap[namespace+"/"+source.Net]; ok {
+				source.Interface = srcIface
+				if srcIfaceIPAddress, ok := ifNameAddressMap[srcIface]; ok {
+					source.IP = srcIfaceIPAddress
+				}
 			}
-			if iface.NetworkStatus.Interface == "" {
-				primaryIfaceIPAddress = iface.NetworkStatus.IPs[0]
+		} else if source.Interface != "" {
+			if srcIfaceIPAddress, ok := ifNameAddressMap[source.Interface]; ok {
+				source.IP = srcIfaceIPAddress
 			}
 		}
 		if source.IP == "" {

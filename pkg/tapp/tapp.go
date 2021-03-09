@@ -19,41 +19,17 @@ package tapp
 import (
 	"errors"
 	"fmt"
-	"net"
 
 	"github.com/Nordix/GoBAT/pkg/util"
-	"github.com/sirupsen/logrus"
 )
 
 // NewServer get the server implementation for the given protocol
-func NewServer(readBufferSize, port int, protocol string, config util.Config) ([]util.ServerImpl, error) {
+func NewServer(ifNameAddressMap map[string]string, readBufferSize, port int, protocol string, config util.Config) ([]util.ServerImpl, error) {
 	servers := make([]util.ServerImpl, 0)
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return nil, err
-	}
-	if len(ifaces) == 0 {
-		return nil, errors.New("no interfaces present. server creation failed")
-	}
 	switch protocol {
 	case util.ProtocolUDP:
-		for _, iface := range ifaces {
-			addrs, err := iface.Addrs()
-			if err != nil {
-				logrus.Errorf("error in retrieving ip addess for interface %s: %v", iface.Name, err)
-				continue
-			}
-			if addrs == nil || len(addrs) == 0 {
-				logrus.Warnf("no ip addess assigned for interface %s, ignoring", iface.Name)
-				continue
-			}
-			// There is always single IP assigned to the interface
-			ipNet := addrs[0].(*net.IPNet)
-			if ipNet.IP.IsLoopback() {
-				logrus.Infof("loop back interface %s, ignoring", iface.Name)
-				continue
-			}
-			udpServer, err := createUDPServer(ipNet.IP.String(), readBufferSize, port, config)
+		for _, ip := range ifNameAddressMap {
+			udpServer, err := createUDPServer(ip, readBufferSize, port, config)
 			if err != nil {
 				return nil, err
 			}
