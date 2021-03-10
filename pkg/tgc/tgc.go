@@ -295,9 +295,10 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 		if pair == "" || strings.HasPrefix(pair, "#") {
 			continue
 		}
-		elements := strings.Split(pair, "},")
+		elements := strings.Split(pair, "}\",")
 		source := &util.Source{}
-		sourceStr := strings.TrimSpace(elements[0] + "}")
+		sourceStr := strings.TrimLeft(strings.TrimSpace(elements[0]), "\"") + "}"
+		sourceStr = strings.ReplaceAll(sourceStr, "'", "\"")
 		if err := json.Unmarshal([]byte(sourceStr), source); err != nil {
 			logrus.Errorf("error in parsing the source for pair %v: %v", sourceStr, err)
 			continue
@@ -355,7 +356,7 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 func trimSlice(strs []string) []string {
 	var elements []string
 	for _, str := range strs {
-		elements = append(elements, strings.TrimSpace(str))
+		elements = append(elements, strings.Trim(strings.TrimSpace(str), "\""))
 	}
 	return elements
 }

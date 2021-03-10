@@ -1,13 +1,13 @@
 # Copyright (c) 2021 Ericsson Software Technology
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
+# Licensed under the Apache License, Version 2.0 (the 'License');
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 #     http:#www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
+# distributed under the License is distributed on an 'AS IS' BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
@@ -17,12 +17,12 @@ metadata:
   name: net-bat-pairing
 data:
   net-bat-pairing.cfg: |
-    {"type": "pod", "ns": "default", "name": "tgen-tapp-pod-a"}, 192.168.167.138, udp, primary network
-    {"type": "deployment", "ns": "default", "name": "tgen-tapp-c-deployment"}, 192.168.167.186, udp, primary network
-    {"type": "deployment", "ns": "default", "name": "tgen-tapp-c-deployment"}, 192.168.167.187, udp, primary network
-    {"type": "deployment", "ns": "default", "name": "tgen-tapp-c-deployment"}, 192.168.167.188, udp, primary network
-    {"type": "pod", "ns": "default", "name": "tgen-tapp-pod-a"}, tgen-tapp-c-headless-service, udp, E-W Pod-Headless service
-    {"type": "pod", "ns": "default", "name": "tgen-tapp-pod-b"}, tgen-tapp-d-clusterip-service, udp, E-W Pod-ClusterIP service
-    {"type": "pod", "ns": "default", "name": "tgen-tapp-pod-a", "interface": "net1"}, 10.10.10.2, udp, secondary network
-    {"type": "pod", "ns": "default", "name": "tgen-tapp-pod-a", "net": "test-net"}, 10.10.10.3, udp, secondary network
-    {"type": "pod", "ns": "default", "name": "tgen-tapp-pod-a", "interface": "net1"}, 10.10.10.2, http, secondary network
+    "{'type': 'pod', 'ns': 'default', 'name': 'tgen-tapp-pod-a'}", "192.168.167.138", udp, "primary network"
+    "{'type': 'deployment', 'ns': 'default', 'name': 'tgen-tapp-c-deployment'}", "192.168.167.186", udp, "primary network"
+    "{'type': 'deployment', 'ns': 'default', 'name': 'tgen-tapp-c-deployment'}", "192.168.167.187", udp, "primary network"
+    "{'type': 'deployment', 'ns': 'default', 'name': 'tgen-tapp-c-deployment'}", "192.168.167.188", udp, "primary network"
+    "{'type': 'pod', 'ns': 'default', 'name': 'tgen-tapp-pod-a'}", "tgen-tapp-c-headless-service", udp, "E-W Pod-Headless service"
+    "{'type': 'pod', 'ns': 'default', 'name': 'tgen-tapp-pod-b'}", "tgen-tapp-d-clusterip-service", udp, "E-W Pod-ClusterIP service"
+    "{'type': 'pod', 'ns': 'default', 'name': 'tgen-tapp-pod-a', 'interface': 'net1'}", "10.10.10.2", udp, "secondary network"
+    "{'type': 'pod', 'ns': 'default', 'name': 'tgen-tapp-pod-a', 'net': 'test-net'}", "10.10.10.3", udp, "secondary network"
+    "{'type': 'pod', 'ns': 'default', 'name': 'tgen-tapp-pod-a', 'interface': 'net1'}", "10.10.10.2", http, "secondary network"
