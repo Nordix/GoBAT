@@ -26,7 +26,8 @@ func NewServer(ifNameAddressMap map[string]string, readBufferSize, port int, pro
 	servers := make([]util.ServerImpl, 0)
 	switch protocol {
 	case util.ProtocolUDP:
-		for _, ip := range ifNameAddressMap {
+		for ifName, ip := range ifNameAddressMap {
+			logrus.Infof("creating udp server for %s:%s", ifName, ip)
 			udpServer, err := createUDPServer(ip, readBufferSize, port, config)
 			if err != nil {
 				logrus.Errorf("error creating udp server on ip address %s: %v", ip, err)

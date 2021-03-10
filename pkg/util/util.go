@@ -184,6 +184,7 @@ func GetNetInterfaces() (map[string]string, error) {
 		return nil, errors.New("no interfaces present")
 	}
 	for _, iface := range ifaces {
+		logrus.Infof("found interface %s", iface.Name)
 		addrs, err := iface.Addrs()
 		if err != nil {
 			logrus.Errorf("error in retrieving ip addess for interface %s: %v", iface.Name, err)
@@ -199,6 +200,7 @@ func GetNetInterfaces() (map[string]string, error) {
 			logrus.Infof("loop back interface %s, ignoring", iface.Name)
 			continue
 		}
+		logrus.Infof("interface %s has ip address %s", iface.Name, ipNet.IP.String())
 		ifaceMap[iface.Name] = ipNet.IP.String()
 	}
 	return ifaceMap, nil

@@ -23,6 +23,7 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
+	"time"
 
 	"github.com/Nordix/GoBAT/pkg/tgc"
 	"github.com/Nordix/GoBAT/pkg/util"
@@ -129,6 +130,7 @@ func initializeLog(logFile string) error {
 		return err
 	}
 	mw := io.MultiWriter(os.Stdout, f)
+	logrus.SetFormatter(&logrus.TextFormatter{TimestampFormat: time.StampMicro})
 	logrus.SetOutput(mw)
 	return nil
 }
