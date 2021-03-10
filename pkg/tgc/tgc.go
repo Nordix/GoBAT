@@ -103,11 +103,7 @@ func (tg *podTGC) StartTGC() {
 					return
 				}
 				for _, protocol := range config.GetProfiles() {
-					servers, err := tapp.NewServer(ifNameAddressMap, tg.socketReadBufferSize, util.Port, protocol, tg.config)
-					if err != nil {
-						logrus.Errorf("server for %s, creation failed: err %v", protocol, err)
-						continue
-					}
+					servers := tapp.NewServer(ifNameAddressMap, tg.socketReadBufferSize, util.Port, protocol, tg.config)
 					tg.serversMap[protocol] = servers
 				}
 				if tg.netBatPairs != nil {

@@ -17,29 +17,30 @@
 package tapp
 
 import (
-	"errors"
-	"fmt"
-
 	"github.com/Nordix/GoBAT/pkg/util"
+	"github.com/sirupsen/logrus"
 )
 
 // NewServer get the server implementation for the given protocol
-func NewServer(ifNameAddressMap map[string]string, readBufferSize, port int, protocol string, config util.Config) ([]util.ServerImpl, error) {
+func NewServer(ifNameAddressMap map[string]string, readBufferSize, port int, protocol string, config util.Config) []util.ServerImpl {
 	servers := make([]util.ServerImpl, 0)
 	switch protocol {
 	case util.ProtocolUDP:
 		for _, ip := range ifNameAddressMap {
 			udpServer, err := createUDPServer(ip, readBufferSize, port, config)
 			if err != nil {
-				return nil, err
+				logrus.Errorf("error creating udp server on ip address %s: %v", ip, err)
+				continue
 			}
 			servers = append(servers, udpServer)
 		}
-		return servers, nil
+		return servers
 	case util.ProtocolHTTP:
-		return nil, errors.New("http server not supported")
+		logrus.Errorf("http server not supported")
+		return nil
 	default:
-		return nil, fmt.Errorf("unknown protocol %s", protocol)
+		logrus.Errorf("unknown protocol %s", protocol)
+		return nil
 	}
 }
 
