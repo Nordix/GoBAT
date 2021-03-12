@@ -85,6 +85,7 @@ type Message struct {
 	SequenceNumber   int64
 	SendTimeStamp    int64
 	RespondTimeStamp int64
+	Length           int
 }
 
 // Server struct used by protocol server
@@ -110,8 +111,8 @@ type ClientImpl interface {
 }
 
 // NewMessage creates a new message
-func NewMessage(sequence, sendTimeStamp int64) *Message {
-	return &Message{SequenceNumber: sequence, SendTimeStamp: sendTimeStamp, RespondTimeStamp: 0}
+func NewMessage(sequence, sendTimeStamp int64, packetSize int) *Message {
+	return &Message{SequenceNumber: sequence, SendTimeStamp: sendTimeStamp, RespondTimeStamp: 0, Length: packetSize}
 }
 
 // GetPaddingPayload get payload for the given length
@@ -125,7 +126,7 @@ func GetPaddingPayload(payloadSize int) ([]byte, error) {
 
 // GetMessageHeaderLength get message header length
 func GetMessageHeaderLength() (int, error) {
-	msg := Message{SequenceNumber: 0, SendTimeStamp: 0, RespondTimeStamp: 0}
+	msg := Message{SequenceNumber: 0, SendTimeStamp: 0, RespondTimeStamp: 0, Length: 0}
 	byteArr, err := msgpack.Marshal(msg)
 	if err != nil {
 		return -1, err

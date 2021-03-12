@@ -225,7 +225,7 @@ func (c *UDPClient) StartPackets(config util.Config) {
 		logrus.Errorf("error in getting payload for udp pair %v", *c.pair)
 		return
 	}
-	baseMsg := util.NewMessage(0, 0)
+	baseMsg := util.NewMessage(0, 0, packetSize)
 	baseByteArr, err := msgpack.Marshal(&baseMsg)
 	if err != nil {
 		c.trafficNotStarted.Inc()

@@ -109,7 +109,7 @@ func (s *UDPServer) ReadFromSocket(bufSize int) {
 				continue
 			}
 			//logrus.Infof("responding to messgage seq: %d, sendtimestamp: %d, respondtimestamp: %d", msg.SequenceNumber, msg.SendTimeStamp, msg.RespondTimeStamp)
-			_, err = s.connection.WriteToUDP(receivedByteArr, addr)
+			_, err = s.connection.WriteToUDP(receivedByteArr[:msg.Length], addr)
 			if err != nil {
 				logrus.Errorf("error in writing message %v back to udp client connection: err %v", msg, err)
 				if s.stop == true {
