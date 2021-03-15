@@ -20,30 +20,43 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/Nordix/GoBAT/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack"
 )
 
+const activeClientStreamsStr = "active_client_streams"
+
 // UDPServer udp server implementation
 type UDPServer struct {
-	Server          util.Server
-	connection      *net.UDPConn
-	isStopped       sync.WaitGroup
-	msgHeaderLength int
-	stop            bool
+	Server              util.Server
+	connection          *net.UDPConn
+	isStopped           sync.WaitGroup
+	msgHeaderLength     int
+	stop                bool
+	activeClientStreams prometheus.Gauge
+	promRegistry        *prometheus.Registry
+	activeClientsMap    map[string]int64
+	mutex               *sync.Mutex
 }
 
 // NewUDPServer creates a new udp echo server
 func NewUDPServer(ipAddress string, port int) util.ServerImpl {
 	udpServer := &UDPServer{Server: util.Server{IPAddress: ipAddress, Port: port}, stop: false}
-	udpServer.isStopped.Add(1)
+	udpServer.isStopped.Add(2)
 	msgHeaderLength, err := util.GetMessageHeaderLength()
 	if err != nil {
 		panic(err)
 	}
 	udpServer.msgHeaderLength = msgHeaderLength
+	labelMap := make(map[string]string)
+	labelMap["server_ip"] = ipAddress
+	udpServer.activeClientStreams = util.NewGauge(util.PromNamespace, util.ProtocolUDP, activeClientStreamsStr, "active client streams", labelMap)
+	udpServer.promRegistry.MustRegister(udpServer.activeClientStreams)
+	udpServer.activeClientsMap = make(map[string]int64)
 	return udpServer
 }
 
@@ -69,6 +82,30 @@ func (s *UDPServer) SetupServerConnection(config util.Config) error {
 	logrus.Infof("udp server listening on: %s", connection.LocalAddr())
 	s.connection = connection
 	return nil
+}
+
+func (s *UDPServer) HandleIdleConnections(config util.Config) {
+	// TODO: check with Jan if it's ok to use packet timeout to derive
+	// connection timeout and sleep duration.
+	connectionTimeout := config.GetUDPPacketTimeout()
+	sleepDuration := time.Duration(int64((float64(10) / float64(connectionTimeout)) * float64(time.Second)))
+	connectionTimeoutinMicros := int64(util.SecToMicroSec(connectionTimeout))
+	for {
+		if s.stop == true {
+			s.isStopped.Done()
+			return
+		}
+		currentTimeStamp := util.GetTimestampMicroSec()
+		s.mutex.Lock()
+		for clientIp, lastSeen := range s.activeClientsMap {
+			if currentTimeStamp > lastSeen+connectionTimeoutinMicros {
+				delete(s.activeClientsMap, clientIp)
+				s.activeClientStreams.Dec()
+			}
+		}
+		s.mutex.Unlock()
+		time.Sleep(sleepDuration)
+	}
 }
 
 // ReadFromSocket read packets from server socket and writes into the channel
@@ -108,6 +145,13 @@ func (s *UDPServer) ReadFromSocket(bufSize int) {
 				}
 				continue
 			}
+			clientIP := addr.IP.String()
+			s.mutex.Lock()
+			if _, exists := s.activeClientsMap[clientIP]; !exists {
+				s.activeClientStreams.Inc()
+			}
+			s.activeClientsMap[clientIP] = util.GetTimestampMicroSec()
+			s.mutex.Unlock()
 			//logrus.Infof("responding to messgage seq: %d, sendtimestamp: %d, respondtimestamp: %d", msg.SequenceNumber, msg.SendTimeStamp, msg.RespondTimeStamp)
 			_, err = s.connection.WriteToUDP(receivedByteArr[:msg.Length], addr)
 			if err != nil {
@@ -134,5 +178,6 @@ func (s *UDPServer) TearDownServer() {
 	s.stop = true
 	s.connection.Close()
 	s.isStopped.Wait()
+	s.promRegistry.Unregister(s.activeClientStreams)
 	logrus.Infof("udp server connection %s is stopped", s.connection.LocalAddr().String())
 }

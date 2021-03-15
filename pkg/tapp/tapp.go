@@ -52,5 +52,6 @@ func createUDPServer(ipAddress string, readBufferSize, port int, config util.Con
 		return nil, err
 	}
 	go udpServer.ReadFromSocket(readBufferSize)
+	go udpServer.HandleIdleConnections(config)
 	return udpServer, nil
 }

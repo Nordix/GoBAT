@@ -98,6 +98,7 @@ type Server struct {
 type ServerImpl interface {
 	SetupServerConnection(Config) error
 	ReadFromSocket(bufSize int)
+	HandleIdleConnections(Config)
 	TearDownServer()
 }
 
@@ -159,6 +160,18 @@ func NewCounter(namespace, subsystem, name, help string, labelMap map[string]str
 		ConstLabels: labelMap,
 	})
 	return counter
+}
+
+// NewGauge creates a new gauge and registers with prometheus
+func NewGauge(namespace, subsystem, name, help string, labelMap map[string]string) prometheus.Gauge {
+	gauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace:   namespace,
+		Subsystem:   subsystem,
+		Name:        name,
+		Help:        help,
+		ConstLabels: labelMap,
+	})
+	return gauge
 }
 
 // RegisterPromHandler register prometheus http handler
