@@ -48,6 +48,7 @@ const (
 type UDPClient struct {
 	isStopped         sync.WaitGroup
 	connection        *net.UDPConn
+	localAddr         *net.UDPAddr
 	pair              *util.BatPair
 	packetSequence    int64
 	mutex             *sync.Mutex
@@ -78,23 +79,28 @@ func NewUDPClient(p *util.BatPair, reg *prometheus.Registry) util.ClientImpl {
 // SetupConnection sets up udp client connection
 func (c *UDPClient) SetupConnection(config util.Config) error {
 	labelMap := make(map[string]string)
-	labelMap["destination"] = c.pair.Destination
+	labelMap["destination"] = c.pair.Destination.Name
 	labelMap["scenario"] = c.pair.TrafficScenario
 	source, _ := json.Marshal(c.pair.Source)
 	labelMap["source"] = string(source)
 	c.trafficNotStarted = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, trafficNotStartedStr, "traffic not started", labelMap)
 	c.promRegistry.MustRegister(c.trafficNotStarted)
 	var destAddress string
-	if util.IsIPv6(c.pair.Destination) {
-		destAddress = "[" + c.pair.Destination + "]:" + strconv.Itoa(util.Port)
+	if util.IsIPv6(c.pair.Destination.Name) {
+		destAddress = "[" + c.pair.Destination.Name + "]:" + strconv.Itoa(util.Port)
 	} else {
-		destAddress = c.pair.Destination + ":" + strconv.Itoa(util.Port)
+		if !util.IsIPv4(c.pair.Destination.Name) {
+			// destination is domain name
+			c.pair.Destination.IsDN = true
+		}
+		destAddress = c.pair.Destination.Name + ":" + strconv.Itoa(util.Port)
 	}
 	raddr, err := net.ResolveUDPAddr("udp", destAddress)
 	if err != nil {
 		c.trafficNotStarted.Inc()
 		return err
 	}
+	c.pair.Destination.IP = raddr.IP.String()
 	var srcAddress string
 	if util.IsIPv6(c.pair.Source.IP) {
 		srcAddress = "[" + c.pair.Source.IP + "]:0"
@@ -102,7 +108,7 @@ func (c *UDPClient) SetupConnection(config util.Config) error {
 		srcAddress = c.pair.Source.IP + ":0"
 	}
 	laddr, err := net.ResolveUDPAddr("udp", srcAddress)
-	logrus.Infof("udp local address: %s, server address: %s connecting ", laddr.String(), raddr.String())
+	logrus.Infof("udp local address: %s, server address: %s connecting ", laddr.String(), c.pair.Destination.IP)
 	conn, err := net.DialUDP("udp", laddr, raddr)
 	if err != nil {
 		c.trafficNotStarted.Inc()
@@ -111,6 +117,7 @@ func (c *UDPClient) SetupConnection(config util.Config) error {
 	// set read buffer size into 512KB
 	conn.SetReadBuffer(512 * 1024)
 	c.connection = conn
+	c.localAddr = laddr
 	c.packetSent = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetSentStr, "total packet sent", labelMap)
 	c.promRegistry.MustRegister(c.packetSent)
 	c.packetSendFailed = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetSendFailedStr, "total packet send failed", labelMap)
@@ -149,16 +156,16 @@ func (c *UDPClient) SocketRead(bufSize int) {
 				}
 				continue
 			}
-			//logrus.Infof("%s-%s: message received seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
+			//logrus.Infof("%s-%s: message received seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
 			c.mutex.Lock()
 			_, exists := c.pair.PendingRequestsMap[msg.SequenceNumber]
 			if !exists {
 				c.mutex.Unlock()
 				// msg already timed out
-				//logrus.Infof("%s-%s: ignoring message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
+				//logrus.Infof("%s-%s: ignoring message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
 				continue
 			}
-			//logrus.Infof("%s-%s: processing message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
+			//logrus.Infof("%s-%s: processing message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
 			c.roundTrip.Add(float64(util.GetTimestampMicroSec() - msg.SendTimeStamp))
 			c.packetReceived.Inc()
 			delete(c.pair.PendingRequestsMap, msg.SequenceNumber)
@@ -189,7 +196,7 @@ func (c *UDPClient) HandleTimeouts(config util.Config) {
 			if exists {
 				now := util.GetTimestampMicroSec()
 				if (now - sendTimeStamp) > packetTimeoutinMicros {
-					//logrus.Infof("%s-%s: seq: %d, packet timed out: now %d- sendtime %d- timeout %d", c.pair.Source.Name, c.pair.Destination, seq, now, sendTimeStamp, packetTimeoutinMicros)
+					//logrus.Infof("%s-%s: seq: %d, packet timed out: now %d- sendtime %d- timeout %d", c.pair.Source.Name, c.pair.Destination.Name, seq, now, sendTimeStamp, packetTimeoutinMicros)
 					c.packetDropped.Inc()
 					delete(c.pair.PendingRequestsMap, seq)
 					c.mutex.Unlock()
@@ -236,9 +243,27 @@ func (c *UDPClient) StartPackets(config util.Config) {
 	sendRate := config.GetUDPSendRate()
 	interval := util.SecToMicroSec(1) / sendRate
 	start := util.GetTimestampMicroSec()
+	redialPeriodInMicros := int64(util.SecToMicroSec(config.GetUDPRedialPeriod()))
+	nextRedial := start + redialPeriodInMicros
 	for {
+		currentTimeStamp := util.GetTimestampMicroSec()
+		if c.pair.Destination.IsDN && currentTimeStamp > nextRedial {
+			err := c.redialDestination(config)
+			if err != nil {
+				c.packetSendFailed.Inc()
+				logrus.Errorf("error in redialling destination %s: %v", c.pair.Destination.Name, err)
+				if c.stop == true {
+					c.isStopped.Done()
+					return
+				}
+				time.Sleep(util.MicroSecToDuration(interval))
+				continue
+			} else {
+				nextRedial = currentTimeStamp + redialPeriodInMicros
+			}
+		}
 		/* Calculate how many packet to send in this interval */
-		targetSeq := ((util.GetTimestampMicroSec() - start) * int64(sendRate)) / 1000000
+		targetSeq := ((currentTimeStamp - start) * int64(sendRate)) / 1000000
 
 		/* Send the needed packets */
 		for c.packetSequence < targetSeq {
@@ -274,7 +299,7 @@ func (c *UDPClient) StartPackets(config util.Config) {
 				continue
 			}
 			c.packetSent.Inc()
-			//logrus.Infof("%s-%s: message sent seq: %d, sendtimestamp: %d", c.pair.Source.Name, c.pair.Destination, c.packetSequence, sendTimeStamp)
+			//logrus.Infof("%s-%s: message sent seq: %d, sendtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, sendTimeStamp)
 		}
 		/* Sleep for approx. one send interval */
 		time.Sleep(util.MicroSecToDuration(interval))
@@ -284,6 +309,28 @@ func (c *UDPClient) StartPackets(config util.Config) {
 			return
 		}
 	}
+}
+
+func (c *UDPClient) redialDestination(config util.Config) error {
+	raddr, err := net.ResolveUDPAddr("udp", c.pair.Destination.Name+":"+strconv.Itoa(util.Port))
+	if err != nil {
+		return err
+	}
+	remoteIP := raddr.IP.String()
+	if remoteIP == c.pair.Destination.IP {
+		return nil
+	}
+	c.connection.Close()
+	logrus.Infof("destination %s changed its ip address to %s, redialling", c.pair.Destination.Name, remoteIP)
+	conn, err := net.DialUDP("udp", c.localAddr, raddr)
+	if err != nil {
+		return err
+	}
+	// set read buffer size into 512KB
+	conn.SetReadBuffer(512 * 1024)
+	c.connection = conn
+	c.pair.Destination.IP = remoteIP
+	return nil
 }
 
 // TearDownConnection cleans up the udp client connection

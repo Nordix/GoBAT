@@ -70,10 +70,16 @@ type Error struct {
 	Description string
 }
 
+type Remote struct {
+	IsDN bool
+	Name string
+	IP   string
+}
+
 // BatPair represents the BAT traffic to be run between two entities
 type BatPair struct {
 	Source             *Source
-	Destination        string
+	Destination        *Remote
 	TrafficProfile     string
 	TrafficScenario    string
 	PendingRequestsMap map[int64]int64
@@ -184,7 +190,13 @@ func RegisterPromHandler(promPort int, reg *prometheus.Registry) {
 // IsIPv6 to check ipAddress is either ipv6 or not
 func IsIPv6(ipAddress string) bool {
 	ip := net.ParseIP(ipAddress)
-	return ip != nil && strings.Contains(ipAddress, ":")
+	return ip != nil && strings.Count(ipAddress, ":") >= 2
+}
+
+// IsIPv4 to check ipAddress is either ipv4 or not
+func IsIPv4(ipAddress string) bool {
+	ip := net.ParseIP(ipAddress)
+	return ip != nil && strings.Count(ipAddress, ":") < 2
 }
 
 // GetNetInterfaces return interfaces map[name]ipAddress

@@ -28,6 +28,7 @@ const (
 	defaultUDPPacketSize    = 1000
 	defaultUDPPacketTimeout = 5
 	defaultUDPSendRate      = 500
+	defaultUDPRedialPeriod  = 10
 	defaultHTTPSendRate     = 100
 )
 
@@ -36,6 +37,7 @@ type config struct {
 	udpSendRate      int
 	udpPacketSize    int
 	udpPacketTimeout int
+	udpRedialPeriod  int
 	httpSendRate     int
 	httpQuery        string
 	htmlPage         string
@@ -47,6 +49,7 @@ type Config interface {
 	GetUDPSendRate() int
 	GetUDPPacketSize() int
 	GetUDPPacketTimeout() int
+	GetUDPRedialPeriod() int
 	GetHTTPSendRate() int
 	GetHTTPQuery() string
 	GetHTMLPage() string
@@ -55,7 +58,8 @@ type Config interface {
 // LoadConfig parse the config map and load the config struct
 func LoadConfig(cm *v1.ConfigMap) (Config, error) {
 	c := config{udpSendRate: defaultUDPSendRate, udpPacketSize: defaultUDPPacketSize,
-		udpPacketTimeout: defaultUDPPacketTimeout, httpSendRate: defaultHTTPSendRate}
+		udpRedialPeriod: defaultUDPRedialPeriod, udpPacketTimeout: defaultUDPPacketTimeout,
+		httpSendRate: defaultHTTPSendRate}
 	c.profiles = make([]string, 0)
 	yamlMap := make(map[string]map[string]string)
 	err := yaml.Unmarshal([]byte(cm.Data["net-bat-profiles.cfg"]), &yamlMap)
@@ -84,6 +88,13 @@ func LoadConfig(cm *v1.ConfigMap) (Config, error) {
 			c.udpPacketTimeout, err = parseIntValue(val)
 			if err != nil {
 				return nil, fmt.Errorf("parsing udp-packet-timeout failed: err %v", err)
+			}
+		}
+
+		if val, ok := udpEntry["redial-period"]; ok {
+			c.udpRedialPeriod, err = parseIntValue(val)
+			if err != nil {
+				return nil, fmt.Errorf("parsing udp-redial-period failed: err %v", err)
 			}
 		}
 	}
@@ -124,6 +135,10 @@ func (c *config) GetUDPPacketSize() int {
 
 func (c *config) GetUDPPacketTimeout() int {
 	return c.udpPacketTimeout
+}
+
+func (c *config) GetUDPRedialPeriod() int {
+	return c.udpRedialPeriod
 }
 
 func (c *config) GetHTTPSendRate() int {

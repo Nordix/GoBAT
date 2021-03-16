@@ -332,7 +332,8 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 			source.IP = primaryIfaceIPAddress
 		}
 		elements = trimSlice(strings.Split(elements[1], ","))
-		batPair := util.BatPair{Source: source, Destination: elements[0], TrafficProfile: elements[1], TrafficScenario: elements[2]}
+		destination := &util.Remote{Name: elements[0]}
+		batPair := util.BatPair{Source: source, Destination: destination, TrafficProfile: elements[1], TrafficScenario: elements[2]}
 		if batPairs, ok := pairMap[sourceStr]; ok {
 			pairMap[sourceStr] = append(batPairs, batPair)
 		} else {
