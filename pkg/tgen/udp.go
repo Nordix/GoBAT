@@ -250,13 +250,13 @@ func (c *UDPClient) StartPackets(config util.Config) {
 		if c.pair.Destination.IsDN && currentTimeStamp > nextRedial {
 			err := c.redialDestination(config)
 			if err != nil {
-				c.packetSendFailed.Inc()
-				logrus.Errorf("error in redialling destination %s: %v", c.pair.Destination.Name, err)
+				c.trafficNotStarted.Inc()
+				logrus.Errorf("error redialling destination %s: %v", c.pair.Destination.Name, err)
 				if c.stop == true {
 					c.isStopped.Done()
 					return
 				}
-				time.Sleep(util.MicroSecToDuration(interval))
+				time.Sleep(time.Duration(config.GetUDPPacketTimeout()) * time.Second)
 				continue
 			} else {
 				nextRedial = currentTimeStamp + redialPeriodInMicros
