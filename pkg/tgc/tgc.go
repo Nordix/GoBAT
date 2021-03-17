@@ -18,7 +18,6 @@ package tgc
 
 import (
 	"encoding/json"
-	"errors"
 	"math/rand"
 	"strings"
 	"sync"
@@ -264,26 +263,9 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 	if err != nil {
 		return nil, err
 	}
-	var primaryIfaceIPAddress string
 	netIfNameMap := make(map[string]string)
 	for _, iface := range ifaceResponse.Interface {
-		if iface.NetworkStatus.Name != "" {
-			netIfNameMap[iface.NetworkStatus.Name] = iface.NetworkStatus.Interface
-		}
-		// both net name and interface are empty for primary interface
-		if iface.NetworkStatus.Name == "" && iface.NetworkStatus.Interface == "" {
-			// no dual stack as of now. revisit later.
-			if len(iface.NetworkStatus.IPs) > 0 {
-				primaryIfaceIPAddress = iface.NetworkStatus.IPs[0]
-			} else {
-				logrus.Errorf("no primary interface present in nw status, try retrieving it from eth0 interface")
-				if srcIfaceIPAddress, ok := ifNameAddressMap["eth0"]; ok {
-					primaryIfaceIPAddress = srcIfaceIPAddress
-				} else {
-					return nil, errors.New("no primary interface present")
-				}
-			}
-		}
+		netIfNameMap[iface.NetworkStatus.Name] = iface.NetworkStatus.Interface
 	}
 	pairMap := make(map[string][]util.BatPair)
 	rand.Seed(time.Now().Unix())
@@ -329,7 +311,13 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 		}
 		if source.IP == "" {
 			// assign primary network eth0 interface ip address
-			source.IP = primaryIfaceIPAddress
+			if srcIfaceIPAddress, ok := ifNameAddressMap["eth0"]; ok {
+				source.IP = srcIfaceIPAddress
+				source.Interface = "eth0"
+			} else {
+				logrus.Errorf("source doesn't have primary interface in the pair %s, ignoring", pair)
+				continue
+			}
 		}
 		elements = trimSlice(strings.Split(elements[1], ","))
 		destination := &util.Remote{Name: elements[0]}

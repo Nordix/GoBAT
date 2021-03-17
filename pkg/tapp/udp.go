@@ -87,9 +87,8 @@ func (s *UDPServer) SetupServerConnection(config util.Config) error {
 }
 
 func (s *UDPServer) HandleIdleConnections(config util.Config) {
-	// TODO: check with Jan if it's ok to use packet timeout to derive
-	// connection timeout and sleep duration.
-	connectionTimeout := config.GetUDPPacketTimeout()
+	// use 60s for connection timeout
+	connectionTimeout := 60
 	sleepDuration := time.Duration(int64((float64(10) / float64(connectionTimeout)) * float64(time.Second)))
 	connectionTimeoutinMicros := int64(util.SecToMicroSec(connectionTimeout))
 	for {

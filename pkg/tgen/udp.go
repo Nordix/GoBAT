@@ -81,6 +81,8 @@ func (c *UDPClient) SetupConnection(config util.Config) error {
 	labelMap := make(map[string]string)
 	labelMap["destination"] = c.pair.Destination.Name
 	labelMap["scenario"] = c.pair.TrafficScenario
+	labelMap["packet_size"] = strconv.Itoa(config.GetUDPPacketSize())
+	labelMap["packet_rate"] = strconv.Itoa(config.GetUDPSendRate())
 	source, _ := json.Marshal(c.pair.Source)
 	labelMap["source"] = string(source)
 	c.trafficNotStarted = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, trafficNotStartedStr, "traffic not started", labelMap)
