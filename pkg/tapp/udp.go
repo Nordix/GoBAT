@@ -44,19 +44,15 @@ type UDPServer struct {
 }
 
 // NewUDPServer creates a new udp echo server
-func NewUDPServer(ipAddress string, port int) util.ServerImpl {
-	udpServer := &UDPServer{Server: util.Server{IPAddress: ipAddress, Port: port}, stop: false}
+func NewUDPServer(ipAddress string, port int, reg *prometheus.Registry) util.ServerImpl {
+	udpServer := &UDPServer{Server: util.Server{IPAddress: ipAddress, Port: port}, stop: false, mutex: &sync.Mutex{}}
 	udpServer.isStopped.Add(2)
 	msgHeaderLength, err := util.GetMessageHeaderLength()
 	if err != nil {
 		panic(err)
 	}
 	udpServer.msgHeaderLength = msgHeaderLength
-	labelMap := make(map[string]string)
-	labelMap["server_ip"] = ipAddress
-	udpServer.activeClientStreams = util.NewGauge(util.PromNamespace, util.ProtocolUDP, activeClientStreamsStr, "active client streams", labelMap)
-	udpServer.promRegistry.MustRegister(udpServer.activeClientStreams)
-	udpServer.activeClientsMap = make(map[string]int64)
+	udpServer.promRegistry = reg
 	return udpServer
 }
 
@@ -81,6 +77,12 @@ func (s *UDPServer) SetupServerConnection(config util.Config) error {
 	connection.SetReadBuffer(512 * 1024)
 	logrus.Infof("udp server listening on: %s", connection.LocalAddr())
 	s.connection = connection
+
+	labelMap := make(map[string]string)
+	labelMap["server_ip"] = s.Server.IPAddress
+	s.activeClientStreams = util.NewGauge(util.PromNamespace, util.ProtocolUDP, activeClientStreamsStr, "active client streams", labelMap)
+	s.promRegistry.MustRegister(s.activeClientStreams)
+	s.activeClientsMap = make(map[string]int64)
 	return nil
 }
 
