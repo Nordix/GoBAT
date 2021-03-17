@@ -42,6 +42,8 @@ const (
 	packetDroppedStr = "packets_dropped"
 	// roundTripTime represent total round trip time
 	roundTripTimeStr = "total_round_trip_time"
+	// latency represent latency summary
+	latencyStr = "latency"
 )
 
 // UDPClient udp client implementation
@@ -55,12 +57,14 @@ type UDPClient struct {
 	msgHeaderLength   int
 	stop              bool
 	promRegistry      *prometheus.Registry
+	metrics           []prometheus.Collector
 	trafficNotStarted prometheus.Counter
 	packetSent        prometheus.Counter
 	packetSendFailed  prometheus.Counter
 	packetReceived    prometheus.Counter
 	packetDropped     prometheus.Counter
 	roundTrip         prometheus.Counter
+	latency           prometheus.Summary
 }
 
 // NewUDPClient creates a new udp client
@@ -73,6 +77,7 @@ func NewUDPClient(p *util.BatPair, reg *prometheus.Registry) util.ClientImpl {
 	}
 	udpClient.msgHeaderLength = msgHeaderLength
 	udpClient.promRegistry = reg
+	udpClient.metrics = make([]prometheus.Collector, 0)
 	return udpClient
 }
 
@@ -86,7 +91,8 @@ func (c *UDPClient) SetupConnection(config util.Config) error {
 	source, _ := json.Marshal(c.pair.Source)
 	labelMap["source"] = string(source)
 	c.trafficNotStarted = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, trafficNotStartedStr, "traffic not started", labelMap)
-	c.promRegistry.MustRegister(c.trafficNotStarted)
+	c.registerMetric(c.trafficNotStarted)
+
 	var destAddress string
 	if util.IsIPv6(c.pair.Destination.Name) {
 		destAddress = "[" + c.pair.Destination.Name + "]:" + strconv.Itoa(util.Port)
@@ -120,17 +126,32 @@ func (c *UDPClient) SetupConnection(config util.Config) error {
 	conn.SetReadBuffer(512 * 1024)
 	c.connection = conn
 	c.localAddr = laddr
+
 	c.packetSent = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetSentStr, "total packet sent", labelMap)
-	c.promRegistry.MustRegister(c.packetSent)
+	c.registerMetric(c.packetSent)
+
 	c.packetSendFailed = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetSendFailedStr, "total packet send failed", labelMap)
-	c.promRegistry.MustRegister(c.packetSendFailed)
+	c.registerMetric(c.packetSendFailed)
+
 	c.packetReceived = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetReceivedStr, "total packet received", labelMap)
-	c.promRegistry.MustRegister(c.packetReceived)
+	c.registerMetric(c.packetReceived)
+
 	c.packetDropped = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetDroppedStr, "total packet dropped", labelMap)
-	c.promRegistry.MustRegister(c.packetDropped)
+	c.registerMetric(c.packetDropped)
+
 	c.roundTrip = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, roundTripTimeStr, "total round trip time", labelMap)
-	c.promRegistry.MustRegister(c.roundTrip)
+	c.registerMetric(c.roundTrip)
+
+	objectives := map[float64]float64{0.5: 0.05, 0.9: 0.02, 0.95: 0.01, 0.99: 0.005}
+	c.latency = util.NewSummary(util.PromNamespace, c.pair.TrafficProfile, latencyStr, "latency statistics", labelMap, objectives)
+	c.registerMetric(c.latency)
+
 	return nil
+}
+
+func (c *UDPClient) registerMetric(metric prometheus.Collector) {
+	c.promRegistry.MustRegister(metric)
+	c.metrics = append(c.metrics, metric)
 }
 
 // SocketRead read from udp client socket
@@ -168,7 +189,9 @@ func (c *UDPClient) SocketRead(bufSize int) {
 				continue
 			}
 			//logrus.Infof("%s-%s: processing message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
-			c.roundTrip.Add(float64(util.GetTimestampMicroSec() - msg.SendTimeStamp))
+			roundTripTime := float64(util.GetTimestampMicroSec() - msg.SendTimeStamp)
+			c.roundTrip.Add(roundTripTime)
+			c.latency.Observe(roundTripTime)
 			c.packetReceived.Inc()
 			delete(c.pair.PendingRequestsMap, msg.SequenceNumber)
 			c.mutex.Unlock()
@@ -344,11 +367,8 @@ func (c *UDPClient) TearDownConnection() {
 	c.stop = true
 	c.connection.Close()
 	c.isStopped.Wait()
-	c.promRegistry.Unregister(c.trafficNotStarted)
-	c.promRegistry.Unregister(c.packetSent)
-	c.promRegistry.Unregister(c.packetSendFailed)
-	c.promRegistry.Unregister(c.packetReceived)
-	c.promRegistry.Unregister(c.packetDropped)
-	c.promRegistry.Unregister(c.roundTrip)
+	for _, metric := range c.metrics {
+		c.promRegistry.Unregister(metric)
+	}
 	logrus.Infof("udp client connection %s-%s is stopped", c.connection.LocalAddr().String(), c.connection.RemoteAddr().String())
 }

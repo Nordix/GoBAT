@@ -156,28 +156,39 @@ func MicroSecToDuration(msec int) time.Duration {
 	return time.Duration(msec) * time.Microsecond
 }
 
-// NewCounter creates a new counter and registers with prometheus
+// NewCounter API to create a new counter
 func NewCounter(namespace, subsystem, name, help string, labelMap map[string]string) prometheus.Counter {
-	counter := prometheus.NewCounter(prometheus.CounterOpts{
+	return prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace:   namespace,
 		Subsystem:   subsystem,
 		Name:        name,
 		Help:        help,
 		ConstLabels: labelMap,
 	})
-	return counter
 }
 
-// NewGauge creates a new gauge and registers with prometheus
+// NewGauge API to create a new gauge metric
 func NewGauge(namespace, subsystem, name, help string, labelMap map[string]string) prometheus.Gauge {
-	gauge := prometheus.NewGauge(prometheus.GaugeOpts{
+	return prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace:   namespace,
 		Subsystem:   subsystem,
 		Name:        name,
 		Help:        help,
 		ConstLabels: labelMap,
 	})
-	return gauge
+}
+
+// NewSummary API to create a new summary metric
+func NewSummary(namespace, subsystem, name, help string, labelMap map[string]string, objectives map[float64]float64) prometheus.Summary {
+	return prometheus.NewSummary(prometheus.SummaryOpts{
+		Namespace:   namespace,
+		Subsystem:   subsystem,
+		Name:        name,
+		Help:        help,
+		ConstLabels: labelMap,
+		Objectives:  objectives,
+	},
+	)
 }
 
 // RegisterPromHandler register prometheus http handler
