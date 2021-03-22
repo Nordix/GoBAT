@@ -270,9 +270,12 @@ func (c *UDPClient) StartPackets(config util.Config) {
 	start := util.GetTimestampMicroSec()
 	redialPeriodInMicros := int64(util.SecToMicroSec(config.GetUDPRedialPeriod()))
 	nextRedial := start + redialPeriodInMicros
+	var pausePeriod int64
 	for {
 		if config.SuspendTraffic() {
+			t1 := util.GetTimestampMicroSec()
 			time.Sleep(time.Duration(config.GetUDPPacketTimeout()) * time.Second)
+			pausePeriod = pausePeriod + (util.GetTimestampMicroSec() - t1)
 			continue
 		}
 		currentTimeStamp := util.GetTimestampMicroSec()
@@ -292,7 +295,7 @@ func (c *UDPClient) StartPackets(config util.Config) {
 			}
 		}
 		/* Calculate how many packet to send in this interval */
-		targetSeq := ((currentTimeStamp - start) * int64(sendRate)) / 1000000
+		targetSeq := ((currentTimeStamp - start - pausePeriod) * int64(sendRate)) / 1000000
 
 		/* Send the needed packets */
 		for c.packetSequence < targetSeq {
