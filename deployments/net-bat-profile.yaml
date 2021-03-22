@@ -4,6 +4,8 @@ metadata:
   name: net-bat-profile
 data:
   net-bat-profiles.cfg: |
+    common:
+      suspend-traffic: false
     udp:
       send-rate: 500
       packet-size: 1000

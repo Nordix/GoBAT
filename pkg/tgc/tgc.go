@@ -128,13 +128,18 @@ func (tg *podTGC) StartTGC() {
 			case "net-bat-profile":
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
-				config, err := util.LoadConfig(cm)
-				logrus.Infof("updated traffic profile: %v", config)
+				suspendOld := tg.config.SuspendTraffic()
+				_, err := util.ReLoadConfig(cm, tg.config)
+				logrus.Infof("updated traffic profile: %v", tg.config)
 				if err != nil {
 					logrus.Errorf("error processing configmap %v: error %v", cm, err)
 					return
 				}
-				tg.config = config
+				// In case of only suspend or resume traffic cm update, don't
+				// restart the traffic.
+				if suspendOld != tg.config.SuspendTraffic() {
+					return
+				}
 				// restart the client with new config settings
 				tg.restartNetBatTgenClients()
 			}

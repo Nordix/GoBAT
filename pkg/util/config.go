@@ -41,6 +41,7 @@ type config struct {
 	httpSendRate     int
 	httpQuery        string
 	htmlPage         string
+	suspendTraffic   bool
 }
 
 // Config interface
@@ -53,46 +54,60 @@ type Config interface {
 	GetHTTPSendRate() int
 	GetHTTPQuery() string
 	GetHTMLPage() string
+	SuspendTraffic() bool
 }
 
-// LoadConfig parse the config map and load the config struct
 func LoadConfig(cm *v1.ConfigMap) (Config, error) {
 	c := config{udpSendRate: defaultUDPSendRate, udpPacketSize: defaultUDPPacketSize,
 		udpRedialPeriod: defaultUDPRedialPeriod, udpPacketTimeout: defaultUDPPacketTimeout,
-		httpSendRate: defaultHTTPSendRate}
-	c.profiles = make([]string, 0)
+		httpSendRate: defaultHTTPSendRate, suspendTraffic: false}
+	return ReLoadConfig(cm, &c)
+}
+
+// ReLoadConfig parse the config map and load the config struct
+func ReLoadConfig(cm *v1.ConfigMap, c interface{}) (Config, error) {
+	rc := c.(*config)
+	rc.profiles = make([]string, 0)
 	yamlMap := make(map[string]map[string]string)
 	err := yaml.Unmarshal([]byte(cm.Data["net-bat-profiles.cfg"]), &yamlMap)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing the config map data %s", cm.Name)
 	}
-
+	// parse Common profile parameters
+	if commonEntry, ok := yamlMap["common"]; ok {
+		if val, ok := commonEntry["suspend-traffic"]; ok {
+			rc.suspendTraffic, err = strconv.ParseBool(val)
+			if err != nil {
+				return nil, fmt.Errorf("parsing suspend-traffic failed: err %v", err)
+			}
+		}
+	}
 	// Parse UDP profile
 	if udpEntry, ok := yamlMap["udp"]; ok {
-		c.profiles = append(c.profiles, "udp")
+		rc.profiles = append(rc.profiles, "udp")
 		if val, ok := udpEntry["send-rate"]; ok {
-			c.udpSendRate, err = parseIntValue(val)
+			rc.udpSendRate, err = parseIntValue(val)
 			if err != nil {
 				return nil, fmt.Errorf("parsing udp-send-rate failed: err %v", err)
 			}
 		}
 
 		if val, ok := udpEntry["packet-size"]; ok {
-			c.udpPacketSize, err = parseIntValue(val)
+			rc.udpPacketSize, err = parseIntValue(val)
 			if err != nil {
 				return nil, fmt.Errorf("parsing udp-packet-size failed: err %v", err)
 			}
 		}
 
 		if val, ok := udpEntry["packet-timeout"]; ok {
-			c.udpPacketTimeout, err = parseIntValue(val)
+			rc.udpPacketTimeout, err = parseIntValue(val)
 			if err != nil {
 				return nil, fmt.Errorf("parsing udp-packet-timeout failed: err %v", err)
 			}
 		}
 
 		if val, ok := udpEntry["redial-period"]; ok {
-			c.udpRedialPeriod, err = parseIntValue(val)
+			rc.udpRedialPeriod, err = parseIntValue(val)
 			if err != nil {
 				return nil, fmt.Errorf("parsing udp-redial-period failed: err %v", err)
 			}
@@ -101,24 +116,24 @@ func LoadConfig(cm *v1.ConfigMap) (Config, error) {
 
 	// Parse HTTP Profile
 	if httpEntry, ok := yamlMap["http"]; ok {
-		c.profiles = append(c.profiles, "http")
+		rc.profiles = append(rc.profiles, "http")
 		if val, ok := httpEntry["send-rate"]; ok {
-			c.httpSendRate, err = parseIntValue(val)
+			rc.httpSendRate, err = parseIntValue(val)
 			if err != nil {
 				return nil, fmt.Errorf("parsing http send rate failed: err %v", err)
 			}
 		}
 
 		if val, ok := httpEntry["http-query"]; ok {
-			c.httpQuery = val
+			rc.httpQuery = val
 		}
 
 		if val, ok := httpEntry["html-page"]; ok {
-			c.htmlPage = val
+			rc.htmlPage = val
 		}
 	}
 
-	return &c, nil
+	return rc, nil
 }
 
 func (c *config) GetProfiles() []string {
@@ -148,8 +163,13 @@ func (c *config) GetHTTPSendRate() int {
 func (c *config) GetHTTPQuery() string {
 	return c.httpQuery
 }
+
 func (c *config) GetHTMLPage() string {
 	return c.htmlPage
+}
+
+func (c *config) SuspendTraffic() bool {
+	return c.suspendTraffic
 }
 
 func parseIntValue(value string) (int, error) {

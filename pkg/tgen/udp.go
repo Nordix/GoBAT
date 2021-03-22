@@ -271,6 +271,10 @@ func (c *UDPClient) StartPackets(config util.Config) {
 	redialPeriodInMicros := int64(util.SecToMicroSec(config.GetUDPRedialPeriod()))
 	nextRedial := start + redialPeriodInMicros
 	for {
+		if config.SuspendTraffic() {
+			time.Sleep(time.Duration(config.GetUDPPacketTimeout()) * time.Second)
+			continue
+		}
 		currentTimeStamp := util.GetTimestampMicroSec()
 		if c.pair.Destination.IsDN && currentTimeStamp > nextRedial {
 			err := c.redialDestination(config)
