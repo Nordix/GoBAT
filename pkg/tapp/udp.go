@@ -39,8 +39,13 @@ type UDPServer struct {
 	stop                bool
 	activeClientStreams prometheus.Gauge
 	promRegistry        *prometheus.Registry
-	activeClientsMap    map[string]int64
+	activeClientsMap    map[string]*clientInfo
 	mutex               *sync.Mutex
+}
+
+type clientInfo struct {
+	lastSeen      int64
+	arrivedMaxSeq int64
 }
 
 // NewUDPServer creates a new udp echo server
@@ -82,7 +87,7 @@ func (s *UDPServer) SetupServerConnection(config util.Config) error {
 	labelMap["server_ip"] = s.Server.IPAddress
 	s.activeClientStreams = util.NewGauge(util.PromNamespace, util.ProtocolUDP, activeClientStreamsStr, "active client streams", labelMap)
 	s.promRegistry.MustRegister(s.activeClientStreams)
-	s.activeClientsMap = make(map[string]int64)
+	s.activeClientsMap = make(map[string]*clientInfo)
 	return nil
 }
 
@@ -98,8 +103,8 @@ func (s *UDPServer) HandleIdleConnections(config util.Config) {
 		}
 		currentTimeStamp := util.GetTimestampMicroSec()
 		s.mutex.Lock()
-		for clientIp, lastSeen := range s.activeClientsMap {
-			if currentTimeStamp > lastSeen+connectionTimeoutinMicros {
+		for clientIp, clientInfo := range s.activeClientsMap {
+			if currentTimeStamp > clientInfo.lastSeen+connectionTimeoutinMicros {
 				delete(s.activeClientsMap, clientIp)
 				s.activeClientStreams.Dec()
 			}
@@ -150,8 +155,19 @@ func (s *UDPServer) ReadFromSocket(bufSize int) {
 			s.mutex.Lock()
 			if _, exists := s.activeClientsMap[clientIP]; !exists {
 				s.activeClientStreams.Inc()
+				s.activeClientsMap[clientIP] = &clientInfo{}
 			}
-			s.activeClientsMap[clientIP] = util.GetTimestampMicroSec()
+			s.activeClientsMap[clientIP].lastSeen = util.GetTimestampMicroSec()
+			if msg.SequenceNumber > s.activeClientsMap[clientIP].arrivedMaxSeq {
+				seqDiff := msg.SequenceNumber - s.activeClientsMap[clientIP].arrivedMaxSeq
+				if seqDiff > 1 {
+					logrus.Warnf("udp packets on server %s from client %s either missed or will receive a bit later, total %d",
+						s.Server.IPAddress, clientIP, seqDiff)
+				}
+				s.activeClientsMap[clientIP].arrivedMaxSeq = msg.SequenceNumber
+			} else {
+				logrus.Warnf("received reordered udp packet on server %s from client %s", s.Server.IPAddress, clientIP)
+			}
 			s.mutex.Unlock()
 			//logrus.Infof("responding to messgage seq: %d, sendtimestamp: %d, respondtimestamp: %d", msg.SequenceNumber, msg.SendTimeStamp, msg.RespondTimeStamp)
 			_, err = s.connection.WriteToUDP(receivedByteArr[:msg.Length], addr)
