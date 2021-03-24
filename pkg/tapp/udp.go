@@ -28,7 +28,11 @@ import (
 	"github.com/vmihailenco/msgpack"
 )
 
-const activeClientStreamsStr = "active_client_streams"
+const (
+	activeClientStreamsStr = "active_client_streams"
+	srvPacketsMissingStr   = "srv_packets_missing"
+	srvPacketsLateStr      = "srv_packets_late"
+)
 
 // UDPServer udp server implementation
 type UDPServer struct {
@@ -38,9 +42,17 @@ type UDPServer struct {
 	msgHeaderLength     int
 	stop                bool
 	activeClientStreams prometheus.Gauge
+	packetsMissing      prometheus.Counter
+	packetsLate         prometheus.Counter
 	promRegistry        *prometheus.Registry
-	activeClientsMap    map[string]int64
+	metrics             []prometheus.Collector
+	activeClientsMap    map[string]*clientInfo
 	mutex               *sync.Mutex
+}
+
+type clientInfo struct {
+	lastSeen      int64
+	arrivedMaxSeq int64
 }
 
 // NewUDPServer creates a new udp echo server
@@ -53,6 +65,7 @@ func NewUDPServer(ipAddress string, port int, reg *prometheus.Registry) util.Ser
 	}
 	udpServer.msgHeaderLength = msgHeaderLength
 	udpServer.promRegistry = reg
+	udpServer.metrics = make([]prometheus.Collector, 0)
 	return udpServer
 }
 
@@ -80,10 +93,23 @@ func (s *UDPServer) SetupServerConnection(config util.Config) error {
 
 	labelMap := make(map[string]string)
 	labelMap["server_ip"] = s.Server.IPAddress
+
 	s.activeClientStreams = util.NewGauge(util.PromNamespace, util.ProtocolUDP, activeClientStreamsStr, "active client streams", labelMap)
-	s.promRegistry.MustRegister(s.activeClientStreams)
-	s.activeClientsMap = make(map[string]int64)
+	s.registerMetric(s.activeClientStreams)
+
+	s.packetsMissing = util.NewCounter(util.PromNamespace, util.ProtocolUDP, srvPacketsMissingStr, "packets missing or arrive later", labelMap)
+	s.registerMetric(s.packetsMissing)
+
+	s.packetsLate = util.NewCounter(util.PromNamespace, util.ProtocolUDP, srvPacketsLateStr, "packets late", labelMap)
+	s.registerMetric(s.packetsLate)
+
+	s.activeClientsMap = make(map[string]*clientInfo)
 	return nil
+}
+
+func (s *UDPServer) registerMetric(metric prometheus.Collector) {
+	s.promRegistry.MustRegister(metric)
+	s.metrics = append(s.metrics, metric)
 }
 
 func (s *UDPServer) HandleIdleConnections(config util.Config) {
@@ -98,8 +124,8 @@ func (s *UDPServer) HandleIdleConnections(config util.Config) {
 		}
 		currentTimeStamp := util.GetTimestampMicroSec()
 		s.mutex.Lock()
-		for clientIp, lastSeen := range s.activeClientsMap {
-			if currentTimeStamp > lastSeen+connectionTimeoutinMicros {
+		for clientIp, clientInfo := range s.activeClientsMap {
+			if currentTimeStamp > clientInfo.lastSeen+connectionTimeoutinMicros {
 				delete(s.activeClientsMap, clientIp)
 				s.activeClientStreams.Dec()
 			}
@@ -150,8 +176,18 @@ func (s *UDPServer) ReadFromSocket(bufSize int) {
 			s.mutex.Lock()
 			if _, exists := s.activeClientsMap[clientIP]; !exists {
 				s.activeClientStreams.Inc()
+				s.activeClientsMap[clientIP] = &clientInfo{}
 			}
-			s.activeClientsMap[clientIP] = util.GetTimestampMicroSec()
+			s.activeClientsMap[clientIP].lastSeen = util.GetTimestampMicroSec()
+			if msg.SequenceNumber > s.activeClientsMap[clientIP].arrivedMaxSeq {
+				seqDiff := msg.SequenceNumber - s.activeClientsMap[clientIP].arrivedMaxSeq - 1
+				if seqDiff > 0 {
+					s.packetsMissing.Add(float64(seqDiff))
+				}
+				s.activeClientsMap[clientIP].arrivedMaxSeq = msg.SequenceNumber
+			} else {
+				s.packetsLate.Inc()
+			}
 			s.mutex.Unlock()
 			//logrus.Infof("responding to messgage seq: %d, sendtimestamp: %d, respondtimestamp: %d", msg.SequenceNumber, msg.SendTimeStamp, msg.RespondTimeStamp)
 			_, err = s.connection.WriteToUDP(receivedByteArr[:msg.Length], addr)
@@ -179,6 +215,8 @@ func (s *UDPServer) TearDownServer() {
 	s.stop = true
 	s.connection.Close()
 	s.isStopped.Wait()
-	s.promRegistry.Unregister(s.activeClientStreams)
+	for _, metric := range s.metrics {
+		s.promRegistry.Unregister(metric)
+	}
 	logrus.Infof("udp server connection %s is stopped", s.connection.LocalAddr().String())
 }
