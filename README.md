@@ -57,3 +57,6 @@ The deployment and configuration of Prometheus and Grafana is out of scope of th
 ### Metrics per BAT server process
 * Number of ongoing client connections
 
+## Acknowledgements
+
+Thanks big time to [Jan Scheurich ](https://github.com/JanScheurich) for his invaluable design inputs and code reviews.
