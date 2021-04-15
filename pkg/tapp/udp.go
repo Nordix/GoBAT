@@ -37,6 +37,7 @@ const (
 // UDPServer udp server implementation
 type UDPServer struct {
 	Server              util.Server
+	podNameByteArr      []byte
 	connection          *net.UDPConn
 	isStopped           sync.WaitGroup
 	msgHeaderLength     int
@@ -56,14 +57,19 @@ type clientInfo struct {
 }
 
 // NewUDPServer creates a new udp echo server
-func NewUDPServer(ipAddress string, port int, reg *prometheus.Registry) util.ServerImpl {
-	udpServer := &UDPServer{Server: util.Server{IPAddress: ipAddress, Port: port}, stop: false, mutex: &sync.Mutex{}}
+func NewUDPServer(podName, ipAddress string, port int, reg *prometheus.Registry) util.ServerImpl {
+	udpServer := &UDPServer{Server: util.Server{HostName: podName, IPAddress: ipAddress, Port: port}, stop: false, mutex: &sync.Mutex{}}
 	udpServer.isStopped.Add(2)
 	msgHeaderLength, err := util.GetMessageHeaderLength()
 	if err != nil {
 		panic(err)
 	}
+	podNameByteArr, err := msgpack.Marshal(podName)
+	if err != nil {
+		panic(err)
+	}
 	udpServer.msgHeaderLength = msgHeaderLength
+	udpServer.podNameByteArr = podNameByteArr
 	udpServer.promRegistry = reg
 	udpServer.metrics = make([]prometheus.Collector, 0)
 	return udpServer
@@ -93,6 +99,7 @@ func (s *UDPServer) SetupServerConnection(config util.Config) error {
 
 	labelMap := make(map[string]string)
 	labelMap["server_ip"] = s.Server.IPAddress
+	labelMap["server_name"] = s.Server.HostName
 
 	s.activeClientStreams = util.NewGauge(util.PromNamespace, util.ProtocolUDP, activeClientStreamsStr, "active client streams", labelMap)
 	s.registerMetric(s.activeClientStreams)
@@ -162,8 +169,10 @@ func (s *UDPServer) ReadFromSocket(bufSize int) {
 			}
 			// add response time to the message
 			msg.RespondTimeStamp = util.GetTimestampMicroSec()
+			msg.ServerNameLength = len(s.podNameByteArr)
 			byteArr, err := msgpack.Marshal(msg)
 			copy(receivedByteArr, byteArr)
+			copy(receivedByteArr[len(byteArr):], s.podNameByteArr)
 			if err != nil {
 				logrus.Errorf("error in encoding the udp server response message %v", err)
 				if s.stop == true {

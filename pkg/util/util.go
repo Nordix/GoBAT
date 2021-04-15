@@ -91,11 +91,13 @@ type Message struct {
 	SequenceNumber   int64
 	SendTimeStamp    int64
 	RespondTimeStamp int64
+	ServerNameLength int
 	Length           int
 }
 
 // Server struct used by protocol server
 type Server struct {
+	HostName  string
 	IPAddress string
 	Port      int
 }
@@ -119,7 +121,7 @@ type ClientImpl interface {
 
 // NewMessage creates a new message
 func NewMessage(sequence, sendTimeStamp int64, packetSize int) *Message {
-	return &Message{SequenceNumber: sequence, SendTimeStamp: sendTimeStamp, RespondTimeStamp: 0, Length: packetSize}
+	return &Message{SequenceNumber: sequence, SendTimeStamp: sendTimeStamp, RespondTimeStamp: 0, ServerNameLength: 0, Length: packetSize}
 }
 
 // GetPaddingPayload get payload for the given length
