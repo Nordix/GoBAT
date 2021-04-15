@@ -91,15 +91,21 @@ type Message struct {
 	SequenceNumber   int64
 	SendTimeStamp    int64
 	RespondTimeStamp int64
-	ServerNameLength int
+	ServerInfoLength int
 	Length           int
 }
 
 // Server struct used by protocol server
 type Server struct {
-	HostName  string
-	IPAddress string
-	Port      int
+	ServerInfo PodInfo
+	IPAddress  string
+	Port       int
+}
+
+// PodInfo used by tapp to respond with its info to client
+type PodInfo struct {
+	PodName    string
+	WorkerName string
 }
 
 // ServerImpl methods to be implemented by a server
@@ -121,7 +127,7 @@ type ClientImpl interface {
 
 // NewMessage creates a new message
 func NewMessage(sequence, sendTimeStamp int64, packetSize int) *Message {
-	return &Message{SequenceNumber: sequence, SendTimeStamp: sendTimeStamp, RespondTimeStamp: 0, ServerNameLength: 0, Length: packetSize}
+	return &Message{SequenceNumber: sequence, SendTimeStamp: sendTimeStamp, RespondTimeStamp: 0, ServerInfoLength: 0, Length: packetSize}
 }
 
 // GetPaddingPayload get payload for the given length
@@ -135,7 +141,7 @@ func GetPaddingPayload(payloadSize int) ([]byte, error) {
 
 // GetMessageHeaderLength get message header length
 func GetMessageHeaderLength() (int, error) {
-	msg := Message{SequenceNumber: 0, SendTimeStamp: 0, RespondTimeStamp: 0, Length: 0}
+	msg := Message{SequenceNumber: 0, SendTimeStamp: 0, RespondTimeStamp: 0, ServerInfoLength: 0, Length: 0}
 	byteArr, err := msgpack.Marshal(msg)
 	if err != nil {
 		return -1, err

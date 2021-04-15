@@ -44,6 +44,10 @@ const (
 	roundTripTimeStr = "total_round_trip_time"
 	// latency represent latency summary
 	latencyStr = "latency"
+	// serverPodStr pod key used in the metric label map
+	serverPodStr = "server_pod"
+	// serverNodeStr node key used in the metric label map
+	serverNodeStr = "server_node"
 )
 
 // UDPClient udp client implementation
@@ -128,7 +132,8 @@ func (c *UDPClient) SetupConnection(config util.Config) error {
 	c.connection = conn
 	c.localAddr = laddr
 
-	c.metricLabelMap["server_pod"] = ""
+	c.metricLabelMap[serverPodStr] = ""
+	c.metricLabelMap[serverNodeStr] = ""
 	c.registerStreamMetrics()
 
 	return nil
@@ -189,10 +194,10 @@ func (c *UDPClient) SocketRead(bufSize int) {
 		if size > 0 {
 			var (
 				msg        util.Message
-				serverName string
+				serverInfo util.PodInfo
 			)
 			err := msgpack.Unmarshal(receivedByteArr[:c.msgHeaderLength], &msg)
-			err1 := msgpack.Unmarshal(receivedByteArr[c.msgHeaderLength:c.msgHeaderLength+msg.ServerNameLength], &serverName)
+			err1 := msgpack.Unmarshal(receivedByteArr[c.msgHeaderLength:c.msgHeaderLength+msg.ServerInfoLength], &serverInfo)
 			if err != nil || err1 != nil {
 				logrus.Errorf("error in decoding the packet at udp client err %v: %v", err, err1)
 				if c.stop == true {
@@ -216,9 +221,10 @@ func (c *UDPClient) SocketRead(bufSize int) {
 			c.latency.Observe(roundTripTime)
 			c.packetReceived.Inc()
 			delete(c.pair.PendingRequestsMap, msg.SequenceNumber)
-			// if there is change in server pod name, re register the stream metrics
-			if serverName != c.metricLabelMap["server_pod"] {
-				c.metricLabelMap["server_pod"] = serverName
+			// if there is change in server pod and its hosted worker name, re register the stream metrics
+			if serverInfo.PodName != c.metricLabelMap[serverPodStr] || serverInfo.WorkerName != c.metricLabelMap[serverNodeStr] {
+				c.metricLabelMap[serverPodStr] = serverInfo.PodName
+				c.metricLabelMap[serverNodeStr] = serverInfo.WorkerName
 				c.reRegisterStreamMetrics()
 			}
 			c.mutex.Unlock()

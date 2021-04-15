@@ -103,13 +103,15 @@ func (tg *podTGC) StartTGC() {
 				}
 				for _, protocol := range config.GetProfiles() {
 					logrus.Infof("profile: %s", protocol)
-					servers := tapp.NewServer(ifNameAddressMap, tg.socketReadBufferSize, util.Port, tg.namespace+"/"+tg.podName, protocol, tg.config, tg.promRegistry)
+					servers := tapp.NewServer(ifNameAddressMap, tg.socketReadBufferSize, util.Port,
+						tg.namespace+"/"+tg.podName, tg.nodeName, protocol, tg.config, tg.promRegistry)
 					tg.serversMap[protocol] = servers
 				}
 				if tg.netBatPairs != nil {
 					logrus.Infof("net bat profile is set. starting tgen clients")
 					for _, batPair := range tg.netBatPairs {
-						logrus.Infof("bat pair %v, %s, %s, %s", *batPair.Source, batPair.Destination.Name, batPair.TrafficProfile, batPair.TrafficScenario)
+						logrus.Infof("bat pair %v, %s, %s, %s", *batPair.Source, batPair.Destination.Name,
+							batPair.TrafficProfile, batPair.TrafficScenario)
 					}
 					tg.createNetBatTgenClients()
 				}
