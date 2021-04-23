@@ -26,5 +26,9 @@ export GOPATH=${PWD}/.gopath
 export GOBIN=${PWD}/bin
 export CGO_ENABLED=0
 export GO15VENDOREXPERIMENT=1
+export REV_LIST=`git rev-list --tags --max-count=1`
+export REVISION=`git describe --tags $REV_LIST`
+export COMMIT_ID=`git rev-parse --short HEAD`
 
-go install -tags no_openssl "$@" ${REPO_PATH}/cmd/tgenapp
+go install -ldflags "-X main.tgentappver=$REVISION-$COMMIT_ID" -tags no_openssl "$@" ${REPO_PATH}/cmd/tgenapp
+ 

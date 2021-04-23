@@ -18,6 +18,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"os/signal"
@@ -44,11 +45,22 @@ const (
 	LogFile = "/var/log/tgc.log"
 )
 
+var (
+	tgentappver string
+	showVersion bool
+)
+
 func main() {
 
 	readBufferSize := flag.Int("readbufsize", 1000, "socket read buffer size")
 	promPort := flag.Int("promport", 2212, "prometheus http endpoint port number")
+	flag.BoolVar(&showVersion, "version", false, "print version format=<tag>-<git-commit-id-short>")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Printf("%s\n", tgentappver)
+		os.Exit(0)
+	}
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM,
