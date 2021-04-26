@@ -14,7 +14,7 @@
 
 FROM golang:1.15-alpine as builder
 ADD . /usr/src/tgenapp
-RUN apk add --update --virtual build-dependencies build-base linux-headers && \
+RUN apk add --update --virtual build-dependencies build-base linux-headers git && \
     cd /usr/src/tgenapp && \
     make
 
