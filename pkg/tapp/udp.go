@@ -57,15 +57,15 @@ type clientInfo struct {
 }
 
 // NewUDPServer creates a new udp echo server
-func NewUDPServer(podName, workerName, ipAddress string, port int, reg *prometheus.Registry) util.ServerImpl {
-	udpServer := &UDPServer{Server: util.Server{ServerInfo: util.PodInfo{PodName: podName, WorkerName: workerName},
+func NewUDPServer(namespace, podName, workerName, ipAddress string, port int, reg *prometheus.Registry) util.ServerImpl {
+	udpServer := &UDPServer{Server: util.Server{PodInfo: util.PodInfo{Namespace: namespace, Name: podName, WorkerName: workerName},
 		IPAddress: ipAddress, Port: port}, stop: false, mutex: &sync.Mutex{}}
 	udpServer.isStopped.Add(2)
 	msgHeaderLength, err := util.GetMessageHeaderLength()
 	if err != nil {
 		panic(err)
 	}
-	podInfoByteArr, err := msgpack.Marshal(udpServer.Server.ServerInfo)
+	podInfoByteArr, err := msgpack.Marshal(udpServer.Server.PodInfo)
 	if err != nil {
 		panic(err)
 	}
@@ -100,8 +100,9 @@ func (s *UDPServer) SetupServerConnection(config util.Config) error {
 
 	labelMap := make(map[string]string)
 	labelMap["server_ip"] = s.Server.IPAddress
-	labelMap["server_name"] = s.Server.ServerInfo.PodName
-	labelMap["worker_name"] = s.Server.ServerInfo.WorkerName
+	labelMap["server_namespace"] = s.Server.PodInfo.Namespace
+	labelMap["server_name"] = s.Server.PodInfo.Name
+	labelMap["worker_name"] = s.Server.PodInfo.WorkerName
 
 	s.activeClientStreams = util.NewGauge(util.PromNamespace, util.ProtocolUDP, activeClientStreamsStr, "active client streams", labelMap)
 	s.registerMetric(s.activeClientStreams)

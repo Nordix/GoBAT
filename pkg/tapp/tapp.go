@@ -23,14 +23,14 @@ import (
 )
 
 // NewServer get the server implementation for the given protocol
-func NewServer(ifNameAddressMap map[string]string, readBufferSize, port int, podName, nodeName, protocol string,
+func NewServer(ifNameAddressMap map[string]string, readBufferSize, port int, namespace, podName, nodeName, protocol string,
 	config util.Config, reg *prometheus.Registry) []util.ServerImpl {
 	servers := make([]util.ServerImpl, 0)
 	switch protocol {
 	case util.ProtocolUDP:
 		for ifName, ip := range ifNameAddressMap {
 			logrus.Infof("creating udp server for %s:%s", ifName, ip)
-			udpServer, err := createUDPServer(podName, nodeName, ip, readBufferSize, port, config, reg)
+			udpServer, err := createUDPServer(namespace, podName, nodeName, ip, readBufferSize, port, config, reg)
 			if err != nil {
 				logrus.Errorf("error creating udp server on ip address %s: %v", ip, err)
 				continue
@@ -47,9 +47,9 @@ func NewServer(ifNameAddressMap map[string]string, readBufferSize, port int, pod
 	}
 }
 
-func createUDPServer(podName, nodeName, ipAddress string, readBufferSize, port int,
+func createUDPServer(namespace, podName, nodeName, ipAddress string, readBufferSize, port int,
 	config util.Config, reg *prometheus.Registry) (util.ServerImpl, error) {
-	udpServer := NewUDPServer(podName, nodeName, ipAddress, port, reg)
+	udpServer := NewUDPServer(namespace, podName, nodeName, ipAddress, port, reg)
 	err := udpServer.SetupServerConnection(config)
 	if err != nil {
 		return nil, err

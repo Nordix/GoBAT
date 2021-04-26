@@ -44,6 +44,8 @@ const (
 	roundTripTimeStr = "total_round_trip_time"
 	// latency represent latency summary
 	latencyStr = "latency"
+	// serverNamespaceStr pod namespace key used in the metric label map
+	serverNamespaceStr = "server_namespace"
 	// serverPodStr pod key used in the metric label map
 	serverPodStr = "server_pod"
 	// serverNodeStr node key used in the metric label map
@@ -132,6 +134,7 @@ func (c *UDPClient) SetupConnection(config util.Config) error {
 	c.connection = conn
 	c.localAddr = laddr
 
+	c.metricLabelMap[serverNamespaceStr] = ""
 	c.metricLabelMap[serverPodStr] = ""
 	c.metricLabelMap[serverNodeStr] = ""
 	c.registerStreamMetrics()
@@ -221,9 +224,12 @@ func (c *UDPClient) SocketRead(bufSize int) {
 			c.latency.Observe(roundTripTime)
 			c.packetReceived.Inc()
 			delete(c.pair.PendingRequestsMap, msg.SequenceNumber)
-			// if there is change in server pod and its hosted worker name, re register the stream metrics
-			if serverInfo.PodName != c.metricLabelMap[serverPodStr] || serverInfo.WorkerName != c.metricLabelMap[serverNodeStr] {
-				c.metricLabelMap[serverPodStr] = serverInfo.PodName
+			// if there is change in server namespace, pod and its hosted worker name, re register the stream metrics
+			if serverInfo.Namespace != c.metricLabelMap[serverNamespaceStr] ||
+				serverInfo.Name != c.metricLabelMap[serverPodStr] ||
+				serverInfo.WorkerName != c.metricLabelMap[serverNodeStr] {
+				c.metricLabelMap[serverNamespaceStr] = serverInfo.Namespace
+				c.metricLabelMap[serverPodStr] = serverInfo.Name
 				c.metricLabelMap[serverNodeStr] = serverInfo.WorkerName
 				c.reRegisterStreamMetrics()
 			}

@@ -97,14 +97,15 @@ type Message struct {
 
 // Server struct used by protocol server
 type Server struct {
-	ServerInfo PodInfo
-	IPAddress  string
-	Port       int
+	PodInfo   PodInfo
+	IPAddress string
+	Port      int
 }
 
 // PodInfo used by tapp to respond with its info to client
 type PodInfo struct {
-	PodName    string
+	Namespace  string
+	Name       string
 	WorkerName string
 }
 
