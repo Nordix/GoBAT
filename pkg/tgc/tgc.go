@@ -275,7 +275,7 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 		netIfNameMap[iface.NetworkStatus.Name] = iface.NetworkStatus.Interface
 	}
 	pairMap := make(map[string][]util.BatPair)
-	rand.Seed(time.Now().Unix())
+	rand.Seed(time.Now().UnixNano())
 	for _, line := range lines {
 		pair := strings.TrimSpace(line)
 		if pair == "" || strings.HasPrefix(pair, "#") {
