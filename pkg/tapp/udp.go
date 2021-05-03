@@ -22,10 +22,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Nordix/GoBAT/pkg/tgc"
 	"github.com/Nordix/GoBAT/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack"
+	v1 "k8s.io/api/core/v1"
+)
+
+const (
+	UDPProtocolStr = "udp"
+	UDPServerPort  = 8890
 )
 
 const (
@@ -37,6 +44,7 @@ const (
 // UDPServer udp server implementation
 type UDPServer struct {
 	Server              util.Server
+	readBufferSize      int
 	podInfoByteArr      []byte
 	connection          *net.UDPConn
 	isStopped           sync.WaitGroup
@@ -56,28 +64,8 @@ type clientInfo struct {
 	arrivedMaxSeq int64
 }
 
-// NewUDPServer creates a new udp echo server
-func NewUDPServer(namespace, podName, workerName, ipAddress string, port int, reg *prometheus.Registry) util.ServerImpl {
-	udpServer := &UDPServer{Server: util.Server{PodInfo: util.PodInfo{Namespace: namespace, Name: podName, WorkerName: workerName},
-		IPAddress: ipAddress, Port: port}, stop: false, mutex: &sync.Mutex{}}
-	udpServer.isStopped.Add(2)
-	msgHeaderLength, err := util.GetMessageHeaderLength()
-	if err != nil {
-		panic(err)
-	}
-	podInfoByteArr, err := msgpack.Marshal(udpServer.Server.PodInfo)
-	if err != nil {
-		panic(err)
-	}
-	udpServer.msgHeaderLength = msgHeaderLength
-	udpServer.podInfoByteArr = podInfoByteArr
-	udpServer.promRegistry = reg
-	udpServer.metrics = make([]prometheus.Collector, 0)
-	return udpServer
-}
-
 // SetupServerConnection creates server socket and listens for incoming messages
-func (s *UDPServer) SetupServerConnection(config util.Config) error {
+func (s *UDPServer) SetupServerConnection() error {
 	var serverAddress string
 	if util.IsIPv6(s.Server.IPAddress) {
 		serverAddress = "[" + s.Server.IPAddress + "]:" + strconv.Itoa(s.Server.Port)
@@ -104,13 +92,13 @@ func (s *UDPServer) SetupServerConnection(config util.Config) error {
 	labelMap["server_name"] = s.Server.PodInfo.Name
 	labelMap["worker_name"] = s.Server.PodInfo.WorkerName
 
-	s.activeClientStreams = util.NewGauge(util.PromNamespace, util.ProtocolUDP, activeClientStreamsStr, "active client streams", labelMap)
+	s.activeClientStreams = util.NewGauge(util.PromNamespace, UDPProtocolStr, activeClientStreamsStr, "active client streams", labelMap)
 	s.registerMetric(s.activeClientStreams)
 
-	s.packetsMissing = util.NewCounter(util.PromNamespace, util.ProtocolUDP, srvPacketsMissingStr, "packets missing or arrive later", labelMap)
+	s.packetsMissing = util.NewCounter(util.PromNamespace, UDPProtocolStr, srvPacketsMissingStr, "packets missing or arrive later", labelMap)
 	s.registerMetric(s.packetsMissing)
 
-	s.packetsLate = util.NewCounter(util.PromNamespace, util.ProtocolUDP, srvPacketsLateStr, "packets late", labelMap)
+	s.packetsLate = util.NewCounter(util.PromNamespace, UDPProtocolStr, srvPacketsLateStr, "packets late", labelMap)
 	s.registerMetric(s.packetsLate)
 
 	s.activeClientsMap = make(map[string]*clientInfo)
@@ -122,7 +110,7 @@ func (s *UDPServer) registerMetric(metric prometheus.Collector) {
 	s.metrics = append(s.metrics, metric)
 }
 
-func (s *UDPServer) HandleIdleConnections(config util.Config) {
+func (s *UDPServer) HandleIdleConnections() {
 	// use 60s for connection timeout
 	connectionTimeout := 60
 	sleepDuration := time.Duration(int64((float64(10) / float64(connectionTimeout)) * float64(time.Second)))
@@ -146,9 +134,9 @@ func (s *UDPServer) HandleIdleConnections(config util.Config) {
 }
 
 // ReadFromSocket read packets from server socket and writes into the channel
-func (s *UDPServer) ReadFromSocket(bufSize int) {
-	logrus.Infof("tapp udp server read buffer size %d", bufSize)
-	receivedByteArr := make([]byte, bufSize)
+func (s *UDPServer) ReadFromSocket() {
+	logrus.Infof("tapp udp server read buffer size %d", s.readBufferSize)
+	receivedByteArr := make([]byte, s.readBufferSize)
 	for {
 		size, addr, err := s.connection.ReadFromUDP(receivedByteArr)
 		if err != nil {
@@ -231,4 +219,50 @@ func (s *UDPServer) TearDownServer() {
 		s.promRegistry.Unregister(metric)
 	}
 	logrus.Infof("udp server connection %s is stopped", s.connection.LocalAddr().String())
+}
+
+type UDPProtoServerModule struct {
+}
+
+// CreateServer creates a new udp echo server
+func (sm *UDPProtoServerModule) CreateServer(namespace, podName, nodeName, ipAddress string, readBufferSize int,
+	reg *prometheus.Registry) (util.ServerImpl, error) {
+	udpServer := sm.newUDPServer(namespace, podName, nodeName, ipAddress, readBufferSize, reg)
+	err := udpServer.SetupServerConnection()
+	if err != nil {
+		return nil, err
+	}
+	go udpServer.ReadFromSocket()
+	go udpServer.HandleIdleConnections()
+	return udpServer, nil
+}
+
+// LoadBatProfileConfig update udp client with the given profile configuration
+func (sm *UDPProtoServerModule) LoadBatProfileConfig(confMap *v1.ConfigMap) error {
+	// no udp config needed for server
+	return nil
+}
+
+func (sm *UDPProtoServerModule) newUDPServer(namespace, podName, workerName, ipAddress string, readBufferSize int,
+	reg *prometheus.Registry) util.ServerImpl {
+	udpServer := &UDPServer{Server: util.Server{PodInfo: util.PodInfo{Namespace: namespace, Name: podName, WorkerName: workerName},
+		IPAddress: ipAddress, Port: UDPServerPort}, readBufferSize: readBufferSize, stop: false, mutex: &sync.Mutex{}}
+	udpServer.isStopped.Add(2)
+	msgHeaderLength, err := util.GetMessageHeaderLength()
+	if err != nil {
+		panic(err)
+	}
+	podInfoByteArr, err := msgpack.Marshal(udpServer.Server.PodInfo)
+	if err != nil {
+		panic(err)
+	}
+	udpServer.msgHeaderLength = msgHeaderLength
+	udpServer.podInfoByteArr = podInfoByteArr
+	udpServer.promRegistry = reg
+	udpServer.metrics = make([]prometheus.Collector, 0)
+	return udpServer
+}
+
+func init() {
+	tgc.RegiserProtocolServer("udp", &UDPProtoServerModule{})
 }
