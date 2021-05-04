@@ -23,8 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Nordix/GoBAT/pkg/tapp"
-	"github.com/Nordix/GoBAT/pkg/tgen"
 	"github.com/Nordix/GoBAT/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
@@ -33,6 +31,11 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+)
+
+var (
+	protoServers = make(map[string]*util.ProtocolServerModule)
+	protoClients = make(map[string]*util.ProtocolClientModule)
 )
 
 // podTGC pod traffic controller
@@ -54,6 +57,14 @@ type podTGC struct {
 type TGController interface {
 	StartTGC()
 	StopTGC()
+}
+
+func RegiserProtocolServer(protocol string, server util.ProtocolServerModule) {
+	protoServers[protocol] = &server
+}
+
+func RegiserProtocolClient(protocol string, client util.ProtocolClientModule) {
+	protoClients[protocol] = &client
 }
 
 // NewPodTGController creates traffic gen controller for the pod
@@ -90,7 +101,6 @@ func (tg *podTGC) StartTGC() {
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
 				config, err := util.LoadConfig(cm)
-				logrus.Infof("traffic profile: %v", config)
 				if err != nil {
 					logrus.Errorf("error processing configmap %v: error %v", cm, err)
 					return
@@ -101,11 +111,33 @@ func (tg *podTGC) StartTGC() {
 					logrus.Errorf("error retrieving pod interfaces: error %v", err)
 					return
 				}
-				for _, protocol := range config.GetProfiles() {
-					logrus.Infof("profile: %s", protocol)
-					servers := tapp.NewServer(ifNameAddressMap, tg.socketReadBufferSize, util.Port,
-						tg.namespace, tg.podName, tg.nodeName, protocol, tg.config, tg.promRegistry)
+				for protocol, sm := range protoServers {
+					logrus.Infof("available bat server: %s", protocol)
+					err = (*sm).LoadBatProfileConfig(cm)
+					if err != nil {
+						logrus.Errorf("error creating %s server profile config: error %v", protocol, err)
+						return
+					}
+					servers := make([]util.ServerImpl, 0)
+					for ifName, ip := range ifNameAddressMap {
+						logrus.Infof("creating %s server for %s:%s", protocol, ifName, ip)
+						server, err := (*sm).CreateServer(tg.namespace, tg.podName, tg.nodeName, ip,
+							tg.socketReadBufferSize, tg.promRegistry)
+						if err != nil {
+							logrus.Errorf("error creating server on ip address %s: %v", ip, err)
+							continue
+						}
+						servers = append(servers, server)
+					}
 					tg.serversMap[protocol] = servers
+				}
+				for protocol, c := range protoClients {
+					logrus.Infof("available bat client: %s", protocol)
+					err = (*c).LoadBatProfileConfig(cm)
+					if err != nil {
+						logrus.Errorf("error creating %s client profile config: error %v", protocol, err)
+						return
+					}
 				}
 				if tg.netBatPairs != nil {
 					logrus.Infof("net bat profile is set. starting tgen clients")
@@ -132,10 +164,25 @@ func (tg *podTGC) StartTGC() {
 				defer tg.mutex.Unlock()
 				suspendOld := tg.config.SuspendTraffic()
 				_, err := util.ReLoadConfig(cm, tg.config)
-				logrus.Infof("updated traffic profile: %v", tg.config)
 				if err != nil {
 					logrus.Errorf("error processing configmap %v: error %v", cm, err)
 					return
+				}
+				for protocol, ps := range protoServers {
+					logrus.Infof("update config for bat server: %s", protocol)
+					err := (*ps).LoadBatProfileConfig(cm)
+					if err != nil {
+						logrus.Errorf("error updating %s profile config: error %v", protocol, err)
+						return
+					}
+				}
+				for protocol, pc := range protoClients {
+					logrus.Infof("update config for bat client: %s", protocol)
+					err := (*pc).LoadBatProfileConfig(cm)
+					if err != nil {
+						logrus.Errorf("error updating %s profile config: error %v", protocol, err)
+						return
+					}
 				}
 				// In case of only suspend or resume traffic cm update, don't
 				// restart the traffic.
@@ -218,20 +265,24 @@ func (tg *podTGC) createNetBatTgenClients() {
 	for index := range tg.netBatPairs {
 		go func(p *util.BatPair) {
 			p.PendingRequestsMap = make(map[int64]int64)
-			client, err := tgen.NewClient(p, tg.promRegistry)
+			if _, exists := protoClients[p.TrafficProfile]; !exists {
+				logrus.Errorf("error getting protocol client for pair %v", p)
+				return
+			}
+			client, err := (*protoClients[p.TrafficProfile]).CreateClient(p, tg.socketReadBufferSize, tg.promRegistry)
 			if err != nil {
 				logrus.Errorf("error creating client for pair %v: %v", p, err)
 				return
 			}
 			p.ClientConnection = client
-			err = p.ClientConnection.SetupConnection(tg.config)
+			err = p.ClientConnection.SetupConnection()
 			if err != nil {
 				logrus.Errorf("error in setting up the connection for pair %v: %v", p, err)
 				return
 			}
-			go p.ClientConnection.HandleTimeouts(tg.config)
-			go p.ClientConnection.SocketRead(tg.socketReadBufferSize)
-			go p.ClientConnection.StartPackets(tg.config)
+			go p.ClientConnection.HandleTimeouts()
+			go p.ClientConnection.SocketRead()
+			go p.ClientConnection.StartPackets()
 		}((&tg.netBatPairs[index]))
 	}
 }

@@ -32,6 +32,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack"
+	v1 "k8s.io/api/core/v1"
 
 	"github.com/golang/glog"
 	nettypes "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
@@ -42,16 +43,8 @@ import (
 )
 
 const (
-	// ProtocolHTTP http protocol string
-	ProtocolHTTP = "http"
-	// ProtocolUDP udp protocol string
-	ProtocolUDP = "udp"
 	//PromNamespace prometheus udp namespace string
 	PromNamespace = "netbat"
-	// MaxBufferSize max buffer size
-	MaxBufferSize = 65535
-	// Port server port
-	Port = 8890
 )
 
 // Source represents source of the BatPair
@@ -111,19 +104,29 @@ type PodInfo struct {
 
 // ServerImpl methods to be implemented by a server
 type ServerImpl interface {
-	SetupServerConnection(Config) error
-	ReadFromSocket(bufSize int)
-	HandleIdleConnections(Config)
+	SetupServerConnection() error
+	ReadFromSocket()
+	HandleIdleConnections()
 	TearDownServer()
 }
 
 // ClientImpl methods to be implemented by a client
 type ClientImpl interface {
-	SetupConnection(Config) error
+	SetupConnection() error
 	TearDownConnection()
-	SocketRead(bufSize int)
-	HandleTimeouts(Config)
-	StartPackets(Config)
+	SocketRead()
+	HandleTimeouts()
+	StartPackets()
+}
+
+type ProtocolServerModule interface {
+	CreateServer(namespace, podName, nodeName, ipAddress string, readBufferSize int, reg *prometheus.Registry) (ServerImpl, error)
+	LoadBatProfileConfig(confMap *v1.ConfigMap) error
+}
+
+type ProtocolClientModule interface {
+	CreateClient(p *BatPair, readBufferSize int, reg *prometheus.Registry) (ClientImpl, error)
+	LoadBatProfileConfig(confMap *v1.ConfigMap) error
 }
 
 // NewMessage creates a new message
