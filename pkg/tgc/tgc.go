@@ -101,7 +101,6 @@ func (tg *podTGC) StartTGC() {
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
 				config, err := util.LoadConfig(cm)
-				logrus.Infof("traffic profile: %v", config)
 				if err != nil {
 					logrus.Errorf("error processing configmap %v: error %v", cm, err)
 					return
@@ -169,7 +168,6 @@ func (tg *podTGC) StartTGC() {
 					logrus.Errorf("error processing configmap %v: error %v", cm, err)
 					return
 				}
-				logrus.Infof("updated traffic profile: %v", tg.config)
 				for protocol, ps := range protoServers {
 					logrus.Infof("update config for bat server: %s", protocol)
 					err := (*ps).LoadBatProfileConfig(cm)

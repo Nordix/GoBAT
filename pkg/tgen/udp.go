@@ -246,10 +246,8 @@ func (c *UDPStream) SocketRead() {
 
 // HandleTimeouts handles the message timeouts
 func (c *UDPStream) HandleTimeouts() {
-	packetTimeout := c.conf.packetTimeout
-	logrus.Infof("udp packet time out: %d", packetTimeout)
-	sleepDuration := time.Duration(int64((float64(2.5) / float64(packetTimeout)) * float64(time.Second)))
-	packetTimeoutinMicros := int64(util.SecToMicroSec(packetTimeout))
+	sleepDuration := time.Duration(int64((float64(2.5) / float64(c.conf.packetTimeout)) * float64(time.Second)))
+	packetTimeoutinMicros := int64(util.SecToMicroSec(c.conf.packetTimeout))
 	var seq int64 = 1
 	for {
 		if c.stop == true {
@@ -496,6 +494,7 @@ func (cm *UDPClient) LoadBatProfileConfig(confMap *v1.ConfigMap) error {
 			}
 		}
 	}
+	logrus.Infof("udp profiling config: %v", *cm.conf)
 	return nil
 }
 
