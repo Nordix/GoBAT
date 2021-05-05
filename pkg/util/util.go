@@ -23,7 +23,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack"
-	v1 "k8s.io/api/core/v1"
 
 	"github.com/golang/glog"
 	nettypes "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
@@ -111,13 +110,13 @@ type ClientImpl interface {
 }
 
 type ProtocolServerModule interface {
-	CreateServer(namespace, podName, nodeName, ipAddress string, readBufferSize int, reg *prometheus.Registry) (ServerImpl, error)
-	LoadBatProfileConfig(confMap *v1.ConfigMap) error
+	CreateServer(namespace, podName, nodeName, ipAddress, ifName string, readBufferSize int, reg *prometheus.Registry) (ServerImpl, error)
+	LoadBatProfileConfig(profileMap map[string]map[string]string) error
 }
 
 type ProtocolClientModule interface {
 	CreateClient(p *BatPair, readBufferSize int, reg *prometheus.Registry) (ClientImpl, error)
-	LoadBatProfileConfig(confMap *v1.ConfigMap) error
+	LoadBatProfileConfig(profileMap map[string]map[string]string) error
 }
 
 // NewMessage creates a new message

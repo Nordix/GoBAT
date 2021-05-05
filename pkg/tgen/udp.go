@@ -22,8 +22,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack"
-	"gopkg.in/yaml.v2"
-	v1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -440,14 +438,13 @@ func (cm *UDPClient) newStream(p *util.BatPair, readBufferSize int, reg *prometh
 }
 
 // LoadBatProfileConfig update udp client with the given profile configuration
-func (cm *UDPClient) LoadBatProfileConfig(confMap *v1.ConfigMap) error {
-	yamlMap := make(map[string]map[string]string)
-	err := yaml.Unmarshal([]byte(confMap.Data["net-bat-profiles.cfg"]), &yamlMap)
-	if err != nil {
+func (cm *UDPClient) LoadBatProfileConfig(profileMap map[string]map[string]string) error {
+	if profileMap == nil {
 		return errors.New("error parsing the udp profile config map data")
 	}
+	var err error
 	// parse Common profile parameters
-	if commonEntry, ok := yamlMap["common"]; ok {
+	if commonEntry, ok := profileMap["common"]; ok {
 		if val, ok := commonEntry["suspend-traffic"]; ok {
 			cm.conf.suspendTraffic, err = strconv.ParseBool(val)
 			if err != nil {
@@ -456,7 +453,7 @@ func (cm *UDPClient) LoadBatProfileConfig(confMap *v1.ConfigMap) error {
 		}
 	}
 	// Parse UDP profile
-	if udpEntry, ok := yamlMap[tapp.UDPProtocolStr]; ok {
+	if udpEntry, ok := profileMap[tapp.UDPProtocolStr]; ok {
 		if val, ok := udpEntry["send-rate"]; ok {
 			cm.conf.sendRate, err = cm.parseIntValue(val)
 			if err != nil {

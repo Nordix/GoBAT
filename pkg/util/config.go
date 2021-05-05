@@ -17,11 +17,13 @@ import (
 
 type config struct {
 	suspendTraffic bool
+	profileMap     map[string]map[string]string
 }
 
 // Config interface
 type Config interface {
 	SuspendTraffic() bool
+	GetProfileMap() map[string]map[string]string
 }
 
 func LoadConfig(cm *v1.ConfigMap) (Config, error) {
@@ -46,9 +48,14 @@ func ReLoadConfig(cm *v1.ConfigMap, c interface{}) (Config, error) {
 			}
 		}
 	}
+	rc.profileMap = yamlMap
 	return rc, nil
 }
 
 func (c *config) SuspendTraffic() bool {
 	return c.suspendTraffic
+}
+
+func (c *config) GetProfileMap() map[string]map[string]string {
+	return c.profileMap
 }

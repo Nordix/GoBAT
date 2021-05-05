@@ -18,7 +18,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack"
-	v1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -216,7 +215,7 @@ type UDPProtoServerModule struct {
 }
 
 // CreateServer creates a new udp echo server
-func (sm *UDPProtoServerModule) CreateServer(namespace, podName, nodeName, ipAddress string, readBufferSize int,
+func (sm *UDPProtoServerModule) CreateServer(namespace, podName, nodeName, ipAddress, ifName string, readBufferSize int,
 	reg *prometheus.Registry) (util.ServerImpl, error) {
 	udpServer := sm.newUDPServer(namespace, podName, nodeName, ipAddress, readBufferSize, reg)
 	err := udpServer.SetupServerConnection()
@@ -229,7 +228,7 @@ func (sm *UDPProtoServerModule) CreateServer(namespace, podName, nodeName, ipAdd
 }
 
 // LoadBatProfileConfig update udp client with the given profile configuration
-func (sm *UDPProtoServerModule) LoadBatProfileConfig(confMap *v1.ConfigMap) error {
+func (sm *UDPProtoServerModule) LoadBatProfileConfig(profileMap map[string]map[string]string) error {
 	// no udp config needed for server
 	return nil
 }

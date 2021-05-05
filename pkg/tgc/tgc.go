@@ -104,7 +104,7 @@ func (tg *podTGC) StartTGC() {
 				}
 				for protocol, sm := range protoServers {
 					logrus.Infof("available bat server: %s", protocol)
-					err = (*sm).LoadBatProfileConfig(cm)
+					err = (*sm).LoadBatProfileConfig(tg.config.GetProfileMap())
 					if err != nil {
 						logrus.Errorf("error creating %s server profile config: error %v", protocol, err)
 						return
@@ -113,7 +113,7 @@ func (tg *podTGC) StartTGC() {
 					for ifName, ip := range ifNameAddressMap {
 						logrus.Infof("creating %s server for %s:%s", protocol, ifName, ip)
 						server, err := (*sm).CreateServer(tg.namespace, tg.podName, tg.nodeName, ip,
-							tg.socketReadBufferSize, tg.promRegistry)
+							ifName, tg.socketReadBufferSize, tg.promRegistry)
 						if err != nil {
 							logrus.Errorf("error creating server on ip address %s: %v", ip, err)
 							continue
@@ -124,7 +124,7 @@ func (tg *podTGC) StartTGC() {
 				}
 				for protocol, c := range protoClients {
 					logrus.Infof("available bat client: %s", protocol)
-					err = (*c).LoadBatProfileConfig(cm)
+					err = (*c).LoadBatProfileConfig(tg.config.GetProfileMap())
 					if err != nil {
 						logrus.Errorf("error creating %s client profile config: error %v", protocol, err)
 						return
@@ -161,7 +161,7 @@ func (tg *podTGC) StartTGC() {
 				}
 				for protocol, ps := range protoServers {
 					logrus.Infof("update config for bat server: %s", protocol)
-					err := (*ps).LoadBatProfileConfig(cm)
+					err := (*ps).LoadBatProfileConfig(tg.config.GetProfileMap())
 					if err != nil {
 						logrus.Errorf("error updating %s profile config: error %v", protocol, err)
 						return
@@ -169,7 +169,7 @@ func (tg *podTGC) StartTGC() {
 				}
 				for protocol, pc := range protoClients {
 					logrus.Infof("update config for bat client: %s", protocol)
-					err := (*pc).LoadBatProfileConfig(cm)
+					err := (*pc).LoadBatProfileConfig(tg.config.GetProfileMap())
 					if err != nil {
 						logrus.Errorf("error updating %s profile config: error %v", protocol, err)
 						return
