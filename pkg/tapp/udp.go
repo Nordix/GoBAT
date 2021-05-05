@@ -254,5 +254,5 @@ func (sm *UDPProtoServerModule) newUDPServer(namespace, podName, workerName, ipA
 }
 
 func init() {
-	tgc.RegiserProtocolServer(UDPProtocolStr, &UDPProtoServerModule{})
+	tgc.RegisterProtocolServer(UDPProtocolStr, &UDPProtoServerModule{})
 }

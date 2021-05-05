@@ -500,5 +500,5 @@ func init() {
 	client.conf = &config{sendRate: defaultUDPSendRate, packetSize: defaultUDPPacketSize,
 		redialPeriod: defaultUDPRedialPeriod, packetTimeout: defaultUDPPacketTimeout,
 		suspendTraffic: false}
-	tgc.RegiserProtocolClient(tapp.UDPProtocolStr, client)
+	tgc.RegisterProtocolClient(tapp.UDPProtocolStr, client)
 }

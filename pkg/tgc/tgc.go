@@ -50,11 +50,11 @@ type TGController interface {
 	StopTGC()
 }
 
-func RegiserProtocolServer(protocol string, server util.ProtocolServerModule) {
+func RegisterProtocolServer(protocol string, server util.ProtocolServerModule) {
 	protoServers[protocol] = &server
 }
 
-func RegiserProtocolClient(protocol string, client util.ProtocolClientModule) {
+func RegisterProtocolClient(protocol string, client util.ProtocolClientModule) {
 	protoClients[protocol] = &client
 }
 
