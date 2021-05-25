@@ -8,7 +8,11 @@
 package tgc
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
+	"errors"
+	"io/ioutil"
 	"math/rand"
 	"strings"
 	"sync"
@@ -290,13 +294,29 @@ func (tg *podTGC) deleteNetBatTgenClients() {
 }
 
 func handleAddNetBatConfigMap(cm *v1.ConfigMap, namespace, podName string) ([]util.BatPair, error) {
-	pairings := []util.BatPair{}
+	var pairsStr string
 	var err error
 	if val, ok := cm.Data["net-bat-pairing.cfg"]; ok {
-		pairings, err = getAvailableNetBatPairings(namespace, podName, val)
+		pairsStr = val
+	} else if sBin, ok := cm.BinaryData["net-bat-pairing.csv.gz"]; ok {
+		var buf bytes.Buffer
+		gr, err := gzip.NewReader(bytes.NewBuffer(sBin))
 		if err != nil {
 			return nil, err
 		}
+		defer gr.Close()
+		sBin, err = ioutil.ReadAll(gr)
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(sBin)
+		pairsStr = buf.String()
+	} else {
+		return nil, errors.New("no pairing config present")
+	}
+	pairings, err := getAvailableNetBatPairings(namespace, podName, pairsStr)
+	if err != nil {
+		return nil, err
 	}
 	return pairings, nil
 }
