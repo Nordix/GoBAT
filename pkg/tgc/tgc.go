@@ -298,7 +298,7 @@ func handleAddNetBatConfigMap(cm *v1.ConfigMap, namespace, podName string) ([]ut
 	var err error
 	if val, ok := cm.Data["net-bat-pairing.cfg"]; ok {
 		pairsStr = val
-	} else if sBin, ok := cm.BinaryData["net-bat-pairing.csv.gz"]; ok {
+	} else if sBin, ok := cm.BinaryData["net-bat-pairing.cfg.gz"]; ok {
 		var buf bytes.Buffer
 		gr, err := gzip.NewReader(bytes.NewBuffer(sBin))
 		if err != nil {
