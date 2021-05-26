@@ -10,6 +10,7 @@ package tgc
 import (
 	"bytes"
 	"compress/gzip"
+	b64 "encoding/base64"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
@@ -298,7 +299,11 @@ func handleAddNetBatConfigMap(cm *v1.ConfigMap, namespace, podName string) ([]ut
 	var err error
 	if val, ok := cm.Data["net-bat-pairing.cfg"]; ok {
 		pairsStr = val
-	} else if sBin, ok := cm.BinaryData["net-bat-pairing.cfg.gz"]; ok {
+	} else if val, ok := cm.Data["net-bat-pairing.cfg.gz"]; ok {
+		sBin, err := b64.StdEncoding.DecodeString(val)
+		if err != nil {
+			return nil, err
+		}
 		var buf bytes.Buffer
 		gr, err := gzip.NewReader(bytes.NewBuffer(sBin))
 		if err != nil {
