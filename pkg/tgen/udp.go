@@ -48,11 +48,11 @@ const (
 )
 
 const (
-	defaultUDPPacketSize              = 1000
-	defaultUDPPacketTimeout           = 5
-	defaultUDPSendRate                = 500
-	defaultUDPRedialAfterFailRequests = 5
-	defaultReadBufSize                = 1000
+	defaultUDPPacketSize          = 1000
+	defaultUDPPacketTimeout       = 5
+	defaultUDPSendRate            = 500
+	defaultUDPRedialAfterTimeouts = 5
+	defaultReadBufSize            = 1000
 )
 
 // UDPStream udp client implementation
@@ -242,6 +242,7 @@ func (c *UDPStream) HandleTimeouts() {
 	sleepDuration := time.Duration(int64((float64(2.5) / float64(c.conf.packetTimeout)) * float64(time.Second)))
 	packetTimeoutinMicros := int64(util.SecToMicroSec(c.conf.packetTimeout))
 	var seq int64 = 1
+	var timeoutCount int
 	for {
 		if c.stop {
 			c.isStopped.Done()
@@ -258,11 +259,30 @@ func (c *UDPStream) HandleTimeouts() {
 					delete(c.pair.PendingRequestsMap, seq)
 					c.mutex.Unlock()
 					seq++
+					// redial after N (redialAfterTimeouts) successive timeouts
+					timeoutCount++
+					if c.pair.Destination.IsDN && timeoutCount == c.conf.redialAfterTimeouts {
+						timeoutCount = 0
+						err := c.redialDestination()
+						if err != nil {
+							logrus.Errorf("error redialling destination %s: %v", c.pair.Destination.Name, err)
+							if c.stop {
+								c.isStopped.Done()
+								return
+							}
+						}
+					}
 				} else {
+					if timeoutCount > 0 {
+						timeoutCount = 0
+					}
 					c.mutex.Unlock()
 					break
 				}
 			} else {
+				if timeoutCount > 0 {
+					timeoutCount = 0
+				}
 				c.mutex.Unlock()
 				seq++
 				if seq == c.packetSequence {
@@ -299,7 +319,6 @@ func (c *UDPStream) StartPackets() {
 	interval := util.SecToMicroSec(1) / c.conf.sendRate
 	start := util.GetTimestampMicroSec()
 	var pausePeriod int64
-	var failCount int
 	for {
 		if c.conf.suspendTraffic {
 			t1 := util.GetTimestampMicroSec()
@@ -341,18 +360,6 @@ func (c *UDPStream) StartPackets() {
 				if c.stop {
 					c.isStopped.Done()
 					return
-				}
-				failCount++
-				if c.pair.Destination.IsDN && failCount == c.conf.redialAfterFailRequests {
-					failCount = 0
-					err := c.redialDestination()
-					if err != nil {
-						logrus.Errorf("error redialling destination %s: %v", c.pair.Destination.Name, err)
-						if c.stop {
-							c.isStopped.Done()
-							return
-						}
-					}
 				}
 				continue
 			}
@@ -409,11 +416,11 @@ type UDPClient struct {
 }
 
 type config struct {
-	sendRate                int
-	packetSize              int
-	packetTimeout           int
-	redialAfterFailRequests int
-	suspendTraffic          bool
+	sendRate            int
+	packetSize          int
+	packetTimeout       int
+	redialAfterTimeouts int
+	suspendTraffic      bool
 }
 
 // CreateClient create client implementation for the given protocol
@@ -475,8 +482,8 @@ func (cm *UDPClient) LoadBatProfileConfig(profileMap map[string]map[string]strin
 			}
 		}
 
-		if val, ok := udpEntry["redial-after-fail-requests"]; ok {
-			cm.conf.redialAfterFailRequests, err = cm.parseIntValue(val)
+		if val, ok := udpEntry["redial-after-successive-timeouts"]; ok {
+			cm.conf.redialAfterTimeouts, err = cm.parseIntValue(val)
 			if err != nil {
 				return fmt.Errorf("parsing udp-redial-period failed: err %v", err)
 			}
@@ -498,7 +505,7 @@ func init() {
 	client := &UDPClient{}
 	// default config
 	client.conf = &config{sendRate: defaultUDPSendRate, packetSize: defaultUDPPacketSize,
-		redialAfterFailRequests: defaultUDPRedialAfterFailRequests, packetTimeout: defaultUDPPacketTimeout,
+		redialAfterTimeouts: defaultUDPRedialAfterTimeouts, packetTimeout: defaultUDPPacketTimeout,
 		suspendTraffic: false}
 	tgc.RegisterProtocolClient(tapp.UDPProtocolStr, client)
 }

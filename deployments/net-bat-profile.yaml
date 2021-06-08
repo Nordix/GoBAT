@@ -18,7 +18,7 @@ data:
       send-rate: 500
       packet-size: 1000
       packet-timeout: 5
-      redial-after-fail-requests: 5
+      redial-after-successive-timeouts: 5
     http:
       send-rate: 100
       http-query: "http://server.domain.tld/path/to/the/page"
