@@ -36,17 +36,18 @@ var (
 
 // podTGC pod traffic controller
 type podTGC struct {
-	clientSet            kubernetes.Interface
-	socketReadBufferSize int
-	config               util.Config
-	podName              string
-	nodeName             string
-	namespace            string
-	netBatPairs          []util.BatPair
-	stopper              chan struct{}
-	promRegistry         *prometheus.Registry
-	serversMap           map[string][]util.ServerImpl
-	mutex                *sync.Mutex
+	clientSet              kubernetes.Interface
+	socketReadBufferSize   int
+	config                 util.Config
+	podName                string
+	nodeName               string
+	namespace              string
+	netBatPairs            []util.BatPair
+	netPairResourceVersion string
+	stopper                chan struct{}
+	promRegistry           *prometheus.Registry
+	serversMap             map[string][]util.ServerImpl
+	mutex                  *sync.Mutex
 }
 
 // TGController traffic gen controller
@@ -85,6 +86,7 @@ func (tg *podTGC) StartTGC() {
 			case "net-bat-pairing":
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
+				tg.netPairResourceVersion = cm.GetResourceVersion()
 				tg.handleNetBatPairingAddEvent(cm)
 				return
 			case "storage-bat-conf":
@@ -96,6 +98,7 @@ func (tg *podTGC) StartTGC() {
 			case "net-bat-profile":
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
+
 				config, err := util.LoadConfig(cm)
 				if err != nil {
 					logrus.Errorf("error processing configmap %v: error %v", cm, err)
@@ -147,10 +150,16 @@ func (tg *podTGC) StartTGC() {
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			cm := newObj.(*v1.ConfigMap)
+			resourceVersion := cm.GetResourceVersion()
 			switch cm.Name {
 			case "net-bat-pairing":
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
+				if resourceVersion == tg.netPairResourceVersion {
+					logrus.Infof("no change in net-bat-pairing config map, returning")
+					return
+				}
+				tg.netPairResourceVersion = resourceVersion
 				// reconfigure the clients with new pairing config
 				tg.deleteNetBatTgenClients()
 				tg.handleNetBatPairingAddEvent(cm)
@@ -158,6 +167,10 @@ func (tg *podTGC) StartTGC() {
 			case "net-bat-profile":
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
+				if resourceVersion == tg.config.GetResourceVersion() {
+					logrus.Infof("no change in net-bat-profile config map, returning")
+					return
+				}
 				suspendOld := tg.config.SuspendTraffic()
 				_, err := util.ReLoadConfig(cm, tg.config)
 				if err != nil {
@@ -195,6 +208,7 @@ func (tg *podTGC) StartTGC() {
 			case "net-bat-pairing":
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
+				tg.netPairResourceVersion = ""
 				tg.deleteNetBatTgenClients()
 				return
 			case "storage-bat-conf":
