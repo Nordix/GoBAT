@@ -51,7 +51,7 @@ const (
 	defaultUDPPacketSize          = 1000
 	defaultUDPPacketTimeout       = 5
 	defaultUDPSendRate            = 500
-	defaultUDPRedialAfterTimeouts = 5
+	defaultUDPRedialAfterTimeouts = 240
 	defaultReadBufSize            = 1000
 )
 
