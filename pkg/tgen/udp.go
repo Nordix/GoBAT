@@ -180,13 +180,13 @@ func (c *UDPStream) SocketRead() {
 	logrus.Infof("udp tgen client read buffer size %d", c.readBufferSize)
 	receivedByteArr := make([]byte, c.readBufferSize)
 	for {
+		if c.stop {
+			c.isStopped.Done()
+			return
+		}
 		size, _, err := c.connection.ReadFromUDP(receivedByteArr)
 		if err != nil {
 			logrus.Debugf("error reading message from the udp client connection %v: err %v", c.connection, err)
-			if c.stop {
-				c.isStopped.Done()
-				return
-			}
 			continue
 		}
 		if size > 0 {
@@ -198,10 +198,6 @@ func (c *UDPStream) SocketRead() {
 			err1 := msgpack.Unmarshal(receivedByteArr[c.msgHeaderLength:c.msgHeaderLength+msg.ServerInfoLength], &serverInfo)
 			if err != nil || err1 != nil {
 				logrus.Errorf("error in decoding the packet at udp client err %v: %v", err, err1)
-				if c.stop {
-					c.isStopped.Done()
-					return
-				}
 				continue
 			}
 			//logrus.Infof("%s-%s: message received seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
@@ -230,10 +226,6 @@ func (c *UDPStream) SocketRead() {
 			}
 			c.mutex.Unlock()
 		}
-		if c.stop {
-			c.isStopped.Done()
-			return
-		}
 	}
 }
 
@@ -254,6 +246,10 @@ func (c *UDPStream) HandleTimeouts() {
 			return
 		}
 		for seq < c.packetSequence {
+			if c.stop {
+				c.isStopped.Done()
+				return
+			}
 			c.mutex.Lock()
 			sendTimeStamp, exists := c.pair.PendingRequestsMap[seq]
 			if exists {
@@ -282,10 +278,6 @@ func (c *UDPStream) HandleTimeouts() {
 						if err != nil {
 							startTimeout = 0
 							logrus.Errorf("error redialling destination %s: %v", c.pair.Destination.Name, err)
-							if c.stop {
-								c.isStopped.Done()
-								return
-							}
 						} else {
 							startTimeout = -1
 						}
@@ -337,6 +329,10 @@ func (c *UDPStream) StartPackets() {
 	start := util.GetTimestampMicroSec()
 	var pausePeriod int64
 	for {
+		if c.stop {
+			c.isStopped.Done()
+			return
+		}
 		if c.conf.suspendTraffic {
 			t1 := util.GetTimestampMicroSec()
 			time.Sleep(time.Duration(c.conf.packetTimeout) * time.Second)
@@ -357,10 +353,6 @@ func (c *UDPStream) StartPackets() {
 			if err != nil {
 				c.packetSendFailed.Inc()
 				logrus.Errorf("error in encoding the udp client message %v", err)
-				if c.stop {
-					c.isStopped.Done()
-					return
-				}
 				continue
 			}
 			copy(baseByteArr, newMsgByteArr)
@@ -374,10 +366,6 @@ func (c *UDPStream) StartPackets() {
 				c.mutex.Unlock()
 				c.packetSendFailed.Inc()
 				logrus.Errorf("error in writing message %v to udp client connection: err %v", baseMsg, err)
-				if c.stop {
-					c.isStopped.Done()
-					return
-				}
 				continue
 			}
 			c.packetSent.Inc()
@@ -385,11 +373,6 @@ func (c *UDPStream) StartPackets() {
 		}
 		/* Sleep for approx. one send interval */
 		time.Sleep(util.MicroSecToDuration(interval))
-
-		if c.stop {
-			c.isStopped.Done()
-			return
-		}
 	}
 }
 

@@ -106,7 +106,7 @@ func (s *UDPServer) HandleIdleConnections() {
 	sleepDuration := time.Duration(int64((float64(10) / float64(connectionTimeout)) * float64(time.Second)))
 	connectionTimeoutinMicros := int64(util.SecToMicroSec(connectionTimeout))
 	for {
-		if s.stop == true {
+		if s.stop {
 			s.isStopped.Done()
 			return
 		}
@@ -128,13 +128,13 @@ func (s *UDPServer) ReadFromSocket() {
 	logrus.Infof("tapp udp server read buffer size %d", s.readBufferSize)
 	receivedByteArr := make([]byte, s.readBufferSize)
 	for {
+		if s.stop {
+			s.isStopped.Done()
+			return
+		}
 		size, addr, err := s.connection.ReadFromUDP(receivedByteArr)
 		if err != nil {
 			logrus.Errorf("error reading message from the udp server connection %v: err %v", s.connection, err)
-			if s.stop == true {
-				s.isStopped.Done()
-				return
-			}
 			continue
 		}
 		if size > 0 {
@@ -142,10 +142,6 @@ func (s *UDPServer) ReadFromSocket() {
 			err := msgpack.Unmarshal(receivedByteArr[:s.msgHeaderLength], &msg)
 			if err != nil {
 				logrus.Errorf("error in decoding the packet at udp server err %v", err)
-				if s.stop == true {
-					s.isStopped.Done()
-					return
-				}
 				continue
 			}
 			// add response time to the message
@@ -156,10 +152,6 @@ func (s *UDPServer) ReadFromSocket() {
 			copy(receivedByteArr[len(byteArr):], s.podInfoByteArr)
 			if err != nil {
 				logrus.Errorf("error in encoding the udp server response message %v", err)
-				if s.stop == true {
-					s.isStopped.Done()
-					return
-				}
 				continue
 			}
 			clientIP := addr.IP.String()
@@ -183,16 +175,8 @@ func (s *UDPServer) ReadFromSocket() {
 			_, err = s.connection.WriteToUDP(receivedByteArr[:msg.Length], addr)
 			if err != nil {
 				logrus.Errorf("error in writing message %v back to udp client connection: err %v", msg, err)
-				if s.stop == true {
-					s.isStopped.Done()
-					return
-				}
 				continue
 			}
-		}
-		if s.stop == true {
-			s.isStopped.Done()
-			return
 		}
 	}
 }
