@@ -1,10 +1,20 @@
-// Copyright (C) 2021, Nordix Foundation
+// Copyright (c) 2021 Nordix Foundation.
 //
-// All rights reserved. This program and the accompanying materials
-// are made available under the terms of the Apache License, Version 2.0
-// which accompanies this distribution, and is available at
-// http://www.apache.org/licenses/LICENSE-2.0
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
+// Package tgen contains different protocol stream client implementations
 package tgen
 
 import (
@@ -16,12 +26,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Nordix/GoBAT/pkg/tapp"
-	"github.com/Nordix/GoBAT/pkg/tgc"
-	"github.com/Nordix/GoBAT/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack"
+
+	"github.com/Nordix/GoBAT/pkg/tapp"
+	"github.com/Nordix/GoBAT/pkg/tgc"
+	"github.com/Nordix/GoBAT/pkg/util"
 )
 
 const (
@@ -52,11 +63,9 @@ const (
 	defaultUDPPacketTimeout = 5
 	defaultUDPSendRate      = 500
 	defaultUDPRedialTimeout = 5
-	defaultReadBufSize      = 1000
 )
 
-// UDPStream udp client implementation
-type UDPStream struct {
+type udpStream struct {
 	isStopped         sync.WaitGroup
 	connection        *net.UDPConn
 	localAddr         *net.UDPAddr
@@ -80,7 +89,7 @@ type UDPStream struct {
 }
 
 // SetupConnection sets up udp client connection
-func (c *UDPStream) SetupConnection() error {
+func (c *udpStream) SetupConnection() error {
 	c.metricLabelMap = make(map[string]string)
 	c.metricLabelMap["destination"] = c.pair.Destination.Name
 	c.metricLabelMap["scenario"] = c.pair.TrafficScenario
@@ -125,7 +134,10 @@ func (c *UDPStream) SetupConnection() error {
 		return err
 	}
 	// set read buffer size into 512KB
-	conn.SetReadBuffer(512 * 1024)
+	err = conn.SetReadBuffer(512 * 1024)
+	if err != nil {
+		return err
+	}
 	c.connection = conn
 	c.localAddr = laddr
 
@@ -137,12 +149,12 @@ func (c *UDPStream) SetupConnection() error {
 	return nil
 }
 
-func (c *UDPStream) registerMetric(metric prometheus.Collector) {
+func (c *udpStream) registerMetric(metric prometheus.Collector) {
 	c.promRegistry.MustRegister(metric)
 	c.streamMetrics = append(c.streamMetrics, metric)
 }
 
-func (c *UDPStream) registerStreamMetrics() {
+func (c *udpStream) registerStreamMetrics() {
 	c.packetSent = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetSentStr, "total packet sent", c.metricLabelMap)
 	c.registerMetric(c.packetSent)
 
@@ -163,20 +175,19 @@ func (c *UDPStream) registerStreamMetrics() {
 	c.registerMetric(c.latency)
 }
 
-func (c *UDPStream) deRegisterStreamMetrics() {
+func (c *udpStream) deRegisterStreamMetrics() {
 	for _, metric := range c.streamMetrics {
 		c.promRegistry.Unregister(metric)
 	}
 }
 
-func (c *UDPStream) reRegisterStreamMetrics() {
+func (c *udpStream) reRegisterStreamMetrics() {
 	c.deRegisterStreamMetrics()
 	c.registerStreamMetrics()
-
 }
 
 // SocketRead read from udp client socket
-func (c *UDPStream) SocketRead() {
+func (c *udpStream) SocketRead() {
 	logrus.Infof("udp tgen client read buffer size %d", c.readBufferSize)
 	receivedByteArr := make([]byte, c.readBufferSize)
 	for {
@@ -200,16 +211,16 @@ func (c *UDPStream) SocketRead() {
 				logrus.Errorf("error in decoding the packet at udp client err %v: %v", err, err1)
 				continue
 			}
-			//logrus.Infof("%s-%s: message received seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
+			// logrus.Infof("%s-%s: message received seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
 			c.mutex.Lock()
 			_, exists := c.pair.PendingRequestsMap[msg.SequenceNumber]
 			if !exists {
 				c.mutex.Unlock()
 				// msg already timed out
-				//logrus.Infof("%s-%s: ignoring message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
+				// logrus.Infof("%s-%s: ignoring message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
 				continue
 			}
-			//logrus.Infof("%s-%s: processing message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
+			// logrus.Infof("%s-%s: processing message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
 			roundTripTime := float64(util.GetTimestampMicroSec() - msg.SendTimeStamp)
 			c.roundTrip.Add(roundTripTime)
 			c.latency.Observe(roundTripTime)
@@ -230,7 +241,7 @@ func (c *UDPStream) SocketRead() {
 }
 
 // HandleTimeouts handles the message timeouts
-func (c *UDPStream) HandleTimeouts() {
+func (c *udpStream) HandleTimeouts() {
 	sleepDuration := time.Duration(int64((float64(2.5) / float64(c.conf.packetTimeout)) * float64(time.Second)))
 	packetTimeoutinMicros := int64(util.SecToMicroSec(c.conf.packetTimeout))
 	redialTimeoutinMicros := int64(util.SecToMicroSec(c.conf.redialTimeout))
@@ -255,7 +266,7 @@ func (c *UDPStream) HandleTimeouts() {
 			if exists {
 				now := util.GetTimestampMicroSec()
 				if (now - sendTimeStamp) > packetTimeoutinMicros {
-					//logrus.Infof("%s-%s: seq: %d, packet timed out: now %d- sendtime %d- timeout %d", c.pair.Source.Name, c.pair.Destination.Name, seq, now, sendTimeStamp, packetTimeoutinMicros)
+					// logrus.Infof("%s-%s: seq: %d, packet timed out: now %d- sendtime %d- timeout %d", c.pair.Source.Name, c.pair.Destination.Name, seq, now, sendTimeStamp, packetTimeoutinMicros)
 					c.packetDropped.Inc()
 					delete(c.pair.PendingRequestsMap, seq)
 					c.mutex.Unlock()
@@ -304,7 +315,7 @@ func (c *UDPStream) HandleTimeouts() {
 }
 
 // StartPackets start sending packet as per the udp configuration
-func (c *UDPStream) StartPackets() {
+func (c *udpStream) StartPackets() {
 	payLoadSize := c.conf.packetSize - c.msgHeaderLength
 	if payLoadSize < 0 {
 		c.trafficNotStarted.Inc()
@@ -336,7 +347,7 @@ func (c *UDPStream) StartPackets() {
 		if c.conf.suspendTraffic {
 			t1 := util.GetTimestampMicroSec()
 			time.Sleep(time.Duration(c.conf.packetTimeout) * time.Second)
-			pausePeriod = pausePeriod + (util.GetTimestampMicroSec() - t1)
+			pausePeriod += (util.GetTimestampMicroSec() - t1)
 			continue
 		}
 
@@ -369,14 +380,14 @@ func (c *UDPStream) StartPackets() {
 				continue
 			}
 			c.packetSent.Inc()
-			//logrus.Infof("%s-%s: message sent seq: %d, sendtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, sendTimeStamp)
+			// logrus.Infof("%s-%s: message sent seq: %d, sendtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, sendTimeStamp)
 		}
 		/* Sleep for approx. one send interval */
 		time.Sleep(util.MicroSecToDuration(interval))
 	}
 }
 
-func (c *UDPStream) redialDestination() error {
+func (c *udpStream) redialDestination() error {
 	raddr, err := net.ResolveUDPAddr("udp", c.pair.Destination.Name+":"+strconv.Itoa(tapp.UDPServerPort))
 	if err != nil {
 		return err
@@ -385,33 +396,42 @@ func (c *UDPStream) redialDestination() error {
 	if remoteIP == c.pair.Destination.IP {
 		return nil
 	}
-	c.connection.Close()
+	err = c.connection.Close()
+	if err != nil {
+		logrus.Warnf("error closing stale udp client connection %s: %v", c.connection.LocalAddr().String(), err)
+	}
 	logrus.Infof("destination %s changed its ip address to %s, redialling", c.pair.Destination.Name, remoteIP)
 	conn, err := net.DialUDP("udp", c.localAddr, raddr)
 	if err != nil {
 		return err
 	}
 	// set read buffer size into 512KB
-	conn.SetReadBuffer(512 * 1024)
+	err = conn.SetReadBuffer(512 * 1024)
+	if err != nil {
+		return err
+	}
 	c.connection = conn
 	c.pair.Destination.IP = remoteIP
 	return nil
 }
 
 // TearDownConnection cleans up the udp client connection
-func (c *UDPStream) TearDownConnection() {
+func (c *udpStream) TearDownConnection() {
 	c.promRegistry.Unregister(c.trafficNotStarted)
 	if c.connection == nil {
 		return
 	}
 	c.stop = true
-	c.connection.Close()
+	err := c.connection.Close()
+	if err != nil {
+		logrus.Warnf("error closing udp client connection %s: %v", c.connection.LocalAddr().String(), err)
+	}
 	c.isStopped.Wait()
 	c.deRegisterStreamMetrics()
 	logrus.Infof("udp client connection %s-%s is stopped", c.connection.LocalAddr().String(), c.connection.RemoteAddr().String())
 }
 
-type UDPClient struct {
+type udpClient struct {
 	conf *config
 }
 
@@ -424,13 +444,13 @@ type config struct {
 }
 
 // CreateClient create client implementation for the given protocol
-func (cm *UDPClient) CreateClient(p *util.BatPair, readBufferSize int, reg *prometheus.Registry) (util.ClientImpl, error) {
+func (cm *udpClient) CreateClient(p *util.BatPair, readBufferSize int, reg *prometheus.Registry) (util.ClientImpl, error) {
 	return cm.newStream(p, readBufferSize, reg), nil
 }
 
 // newStream creates a new udp stream for the given pair
-func (cm *UDPClient) newStream(p *util.BatPair, readBufferSize int, reg *prometheus.Registry) util.ClientImpl {
-	stream := &UDPStream{pair: p, mutex: &sync.Mutex{}, stop: false}
+func (cm *udpClient) newStream(p *util.BatPair, readBufferSize int, reg *prometheus.Registry) util.ClientImpl {
+	stream := &udpStream{pair: p, mutex: &sync.Mutex{}, stop: false}
 	stream.isStopped.Add(3)
 	msgHeaderLength, err := util.GetMessageHeaderLength()
 	if err != nil {
@@ -445,7 +465,7 @@ func (cm *UDPClient) newStream(p *util.BatPair, readBufferSize int, reg *prometh
 }
 
 // LoadBatProfileConfig update udp client with the given profile configuration
-func (cm *UDPClient) LoadBatProfileConfig(profileMap map[string]map[string]string) error {
+func (cm *udpClient) LoadBatProfileConfig(profileMap map[string]map[string]string) error {
 	if profileMap == nil {
 		return errors.New("error parsing the udp profile config map data")
 	}
@@ -493,7 +513,7 @@ func (cm *UDPClient) LoadBatProfileConfig(profileMap map[string]map[string]strin
 	return nil
 }
 
-func (cm *UDPClient) parseIntValue(value string) (int, error) {
+func (cm *udpClient) parseIntValue(value string) (int, error) {
 	valueInt, err := strconv.Atoi(value)
 	if err != nil {
 		return -1, err
@@ -502,7 +522,7 @@ func (cm *UDPClient) parseIntValue(value string) (int, error) {
 }
 
 func init() {
-	client := &UDPClient{}
+	client := &udpClient{}
 	// default config
 	client.conf = &config{sendRate: defaultUDPSendRate, packetSize: defaultUDPPacketSize,
 		redialTimeout: defaultUDPRedialTimeout, packetTimeout: defaultUDPPacketTimeout,

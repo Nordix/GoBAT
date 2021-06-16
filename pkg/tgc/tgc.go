@@ -1,10 +1,21 @@
-// Copyright (C) 2021, Nordix Foundation
+// Copyright (c) 2021 Nordix Foundation.
 //
-// All rights reserved. This program and the accompanying materials
-// are made available under the terms of the Apache License, Version 2.0
-// which accompanies this distribution, and is available at
-// http://www.apache.org/licenses/LICENSE-2.0
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
+// Package tgc contains controller implementation which reacts to config map events,
+// registration, start and teardown of tgen, tapp instances
 package tgc
 
 import (
@@ -19,7 +30,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Nordix/GoBAT/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -27,11 +37,18 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+
+	"github.com/Nordix/GoBAT/pkg/util"
 )
 
 var (
 	protoServers = make(map[string]*util.ProtocolServerModule)
 	protoClients = make(map[string]*util.ProtocolClientModule)
+)
+
+const (
+	netBatPairing = "net-bat-pairing"
+	netBatProfile = "net-bat-profile"
 )
 
 // podTGC pod traffic controller
@@ -56,10 +73,12 @@ type TGController interface {
 	StopTGC()
 }
 
+// RegisterProtocolServer registers the given protocol server with given key
 func RegisterProtocolServer(protocol string, server util.ProtocolServerModule) {
 	protoServers[protocol] = &server
 }
 
+// RegisterProtocolClient registers the given protocol client with given key
 func RegisterProtocolClient(protocol string, client util.ProtocolClientModule) {
 	protoClients[protocol] = &client
 }
@@ -83,19 +102,13 @@ func (tg *podTGC) StartTGC() {
 		AddFunc: func(obj interface{}) {
 			cm := obj.(*v1.ConfigMap)
 			switch cm.Name {
-			case "net-bat-pairing":
+			case netBatPairing:
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
 				tg.netPairResourceVersion = cm.GetResourceVersion()
 				tg.handleNetBatPairingAddEvent(cm)
 				return
-			case "storage-bat-conf":
-				logrus.Errorf("storage bat config not supported")
-				return
-			case "dpdk-bat-conf":
-				logrus.Errorf("dpdk bat config not supported")
-				return
-			case "net-bat-profile":
+			case netBatProfile:
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
 
@@ -152,7 +165,7 @@ func (tg *podTGC) StartTGC() {
 			cm := newObj.(*v1.ConfigMap)
 			resourceVersion := cm.GetResourceVersion()
 			switch cm.Name {
-			case "net-bat-pairing":
+			case netBatPairing:
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
 				if resourceVersion == tg.netPairResourceVersion {
@@ -164,7 +177,7 @@ func (tg *podTGC) StartTGC() {
 				tg.deleteNetBatTgenClients()
 				tg.handleNetBatPairingAddEvent(cm)
 				return
-			case "net-bat-profile":
+			case netBatProfile:
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
 				if resourceVersion == tg.config.GetResourceVersion() {
@@ -205,19 +218,13 @@ func (tg *podTGC) StartTGC() {
 		DeleteFunc: func(obj interface{}) {
 			cm := obj.(*v1.ConfigMap)
 			switch cm.Name {
-			case "net-bat-pairing":
+			case netBatPairing:
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
 				tg.netPairResourceVersion = ""
 				tg.deleteNetBatTgenClients()
 				return
-			case "storage-bat-conf":
-				logrus.Errorf("storage bat config not supported")
-				return
-			case "dpdk-bat-conf":
-				logrus.Errorf("dpdk bat config not supported")
-				return
-			case "net-bat-profile":
+			case netBatProfile:
 				tg.mutex.Lock()
 				defer tg.mutex.Unlock()
 				tg.stopServers()
@@ -323,7 +330,12 @@ func handleAddNetBatConfigMap(cm *v1.ConfigMap, namespace, podName string) ([]ut
 		if err != nil {
 			return nil, err
 		}
-		defer gr.Close()
+		defer func() {
+			err = gr.Close()
+			if err != nil {
+				logrus.Errorf("error closing gzip reader: %v", err)
+			}
+		}()
 		sBin, err = ioutil.ReadAll(gr)
 		if err != nil {
 			return nil, err

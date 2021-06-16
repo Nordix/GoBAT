@@ -1,9 +1,18 @@
-// Copyright (C) 2021, Nordix Foundation
+// Copyright (c) 2021 Nordix Foundation.
 //
-// All rights reserved. This program and the accompanying materials
-// are made available under the terms of the Apache License, Version 2.0
-// which accompanies this distribution, and is available at
-// http://www.apache.org/licenses/LICENSE-2.0
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package main
 
@@ -17,14 +26,15 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/Nordix/GoBAT/pkg/tapp"
-	"github.com/Nordix/GoBAT/pkg/tgc"
-	_ "github.com/Nordix/GoBAT/pkg/tgen"
-	"github.com/Nordix/GoBAT/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+
+	_ "github.com/Nordix/GoBAT/pkg/tapp"
+	"github.com/Nordix/GoBAT/pkg/tgc"
+	_ "github.com/Nordix/GoBAT/pkg/tgen"
+	"github.com/Nordix/GoBAT/pkg/util"
 )
 
 const (
@@ -44,7 +54,6 @@ var (
 )
 
 func main() {
-
 	readBufferSize := flag.Int("readbufsize", 1000, "socket read buffer size")
 	promPort := flag.Int("promport", 2212, "prometheus http endpoint port number")
 	flag.BoolVar(&showVersion, "version", false, "print version format=<tag>-<git-commit-id-short>")
@@ -111,7 +120,6 @@ func main() {
 	tgController.StopTGC()
 
 	logrus.Infof("tgen tapp is stopped")
-
 }
 
 // GetClient returns a k8s clientset to the request from inside of cluster

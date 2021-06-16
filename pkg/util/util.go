@@ -1,10 +1,21 @@
-// Copyright (C) 2021, Nordix Foundation
+// Copyright (c) 2021 Nordix Foundation.
 //
-// All rights reserved. This program and the accompanying materials
-// are made available under the terms of the Apache License, Version 2.0
-// which accompanies this distribution, and is available at
-// http://www.apache.org/licenses/LICENSE-2.0
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
+// Package util contains necessary type definitions and helper methods for
+// tgc, tgen and tapp modules
 package util
 
 import (
@@ -33,7 +44,7 @@ import (
 )
 
 const (
-	//PromNamespace prometheus udp namespace string
+	// PromNamespace prometheus udp namespace string
 	PromNamespace = "netbat"
 )
 
@@ -53,6 +64,7 @@ type Error struct {
 	Description string
 }
 
+// Remote server identifier
 type Remote struct {
 	IsDN bool
 	Name string
@@ -109,11 +121,13 @@ type ClientImpl interface {
 	StartPackets()
 }
 
+// ProtocolServerModule contract to create protocol servers and loading its config
 type ProtocolServerModule interface {
 	CreateServer(namespace, podName, nodeName, ipAddress, ifName string, readBufferSize int, reg *prometheus.Registry) (ServerImpl, error)
 	LoadBatProfileConfig(profileMap map[string]map[string]string) error
 }
 
+// ProtocolClientModule contract to create protocol clients and loading its config
 type ProtocolClientModule interface {
 	CreateClient(p *BatPair, readBufferSize int, reg *prometheus.Registry) (ClientImpl, error)
 	LoadBatProfileConfig(profileMap map[string]map[string]string) error
@@ -197,7 +211,10 @@ func NewSummary(namespace, subsystem, name, help string, labelMap map[string]str
 func RegisterPromHandler(promPort int, reg *prometheus.Registry) {
 	handler := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
 	http.Handle("/metrics", handler)
-	http.ListenAndServe(":"+strconv.Itoa(promPort), nil)
+	err := http.ListenAndServe(":"+strconv.Itoa(promPort), nil)
+	if err != nil {
+		logrus.Errorf("error starting prometheus http endpoint: %v", err)
+	}
 }
 
 // IsIPv6 to check ipAddress is either ipv6 or not
@@ -229,7 +246,7 @@ func GetNetInterfaces() (map[string]string, error) {
 			logrus.Errorf("error in retrieving ip addess for interface %s: %v", iface.Name, err)
 			continue
 		}
-		if addrs == nil || len(addrs) == 0 {
+		if len(addrs) == 0 {
 			logrus.Warnf("no ip addess assigned for interface %s, ignoring", iface.Name)
 			continue
 		}
@@ -243,6 +260,13 @@ func GetNetInterfaces() (map[string]string, error) {
 		ifaceMap[iface.Name] = ipNet.IP.String()
 	}
 	return ifaceMap, nil
+}
+
+func closeFile(f *os.File) {
+	err := f.Close()
+	if err != nil {
+		logrus.Errorf("error closing the file: %v", f)
+	}
 }
 
 // The following methods are copied from https://github.com/openshift/app-netutil/ project
@@ -267,6 +291,8 @@ func GetNetInterfaces() (map[string]string, error) {
 //
 // API Functions
 //
+
+// GetInterfaces get interfaces from /etc/podinfo/annotations file
 func GetInterfaces() (*types.InterfaceResponse, error) {
 	glog.Infof("GetInterfaces: ENTER")
 
@@ -284,7 +310,7 @@ func GetInterfaces() (*types.InterfaceResponse, error) {
 			glog.Errorf("GetInterfaces: Error opening \"annotations\" file: %v ", err)
 			return response, err
 		}
-		defer file.Close()
+		defer closeFile(file)
 
 		// Buffers to store unmarshalled data (from annotations
 		// or files) used by app-netutil
@@ -311,8 +337,7 @@ func GetInterfaces() (*types.InterfaceResponse, error) {
 				}
 
 				if len(parts) == 2 {
-
-					// Remove the Indent from the original marshalling
+					// Remove the Indent from the original marshaling
 					parts[1] = strings.Replace(string(parts[1]), "\\n", "", -1)
 					parts[1] = strings.Replace(string(parts[1]), "\\", "", -1)
 					parts[1] = strings.Replace(string(parts[1]), " ", "", -1)
@@ -469,6 +494,7 @@ func GetInterfaces() (*types.InterfaceResponse, error) {
 	return response, err
 }
 
+// EnvResponse env response
 type EnvResponse struct {
 	Envs map[string]string
 }
@@ -481,7 +507,7 @@ func getEnv() (*EnvResponse, error) {
 		glog.Errorf("Error openning proc environ file: %v", err)
 		return nil, err
 	}
-	defer file.Close()
+	defer closeFile(file)
 
 	envAttrs := make(map[string]string)
 
