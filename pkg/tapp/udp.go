@@ -164,11 +164,15 @@ func (s *udpServer) ReadFromSocket() {
 			msg.RespondTimeStamp = util.GetTimestampMicroSec()
 			msg.ServerInfoLength = len(s.podInfoByteArr)
 			byteArr, err := msgpack.Marshal(msg)
-			copy(receivedByteArr, byteArr)
-			copy(receivedByteArr[len(byteArr):], s.podInfoByteArr)
 			if err != nil {
 				logrus.Errorf("error in encoding the udp server response message %v", err)
 				continue
+			}
+			copy(receivedByteArr, byteArr)
+			copy(receivedByteArr[len(byteArr):], s.podInfoByteArr)
+			pktLength := len(byteArr) + len(s.podInfoByteArr)
+			if msg.Length < pktLength {
+				msg.Length = pktLength
 			}
 			clientIP := addr.IP.String()
 			s.mutex.Lock()

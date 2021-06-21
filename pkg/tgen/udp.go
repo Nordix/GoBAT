@@ -318,10 +318,8 @@ func (c *udpStream) HandleTimeouts() {
 func (c *udpStream) StartPackets() {
 	payLoadSize := c.conf.packetSize - c.msgHeaderLength
 	if payLoadSize < 0 {
-		c.isStopped.Done()
-		c.trafficNotStarted.Inc()
-		logrus.Errorf("udp packet size is too less, recongfigure it with more than %d bytes", c.msgHeaderLength)
-		return
+		payLoadSize = c.msgHeaderLength + 1
+		logrus.Errorf("udp packet size %d is too less, recongfigure packet size with %d bytes", c.conf.packetSize, payLoadSize)
 	}
 	payload, err := util.GetPaddingPayload(payLoadSize)
 	if err != nil {
