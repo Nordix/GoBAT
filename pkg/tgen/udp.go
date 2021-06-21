@@ -318,12 +318,14 @@ func (c *udpStream) HandleTimeouts() {
 func (c *udpStream) StartPackets() {
 	payLoadSize := c.conf.packetSize - c.msgHeaderLength
 	if payLoadSize < 0 {
+		c.isStopped.Done()
 		c.trafficNotStarted.Inc()
 		logrus.Errorf("udp packet size is too less, recongfigure it with more than %d bytes", c.msgHeaderLength)
 		return
 	}
 	payload, err := util.GetPaddingPayload(payLoadSize)
 	if err != nil {
+		c.isStopped.Done()
 		c.trafficNotStarted.Inc()
 		logrus.Errorf("error in getting payload for udp pair %v", *c.pair)
 		return
@@ -331,6 +333,7 @@ func (c *udpStream) StartPackets() {
 	baseMsg := util.NewMessage(0, 0, c.conf.packetSize)
 	baseByteArr, err := msgpack.Marshal(&baseMsg)
 	if err != nil {
+		c.isStopped.Done()
 		c.trafficNotStarted.Inc()
 		logrus.Errorf("error in encoding the base udp client message %v", err)
 		return
