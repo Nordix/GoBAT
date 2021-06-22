@@ -28,6 +28,7 @@ import (
 	"math/rand"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -62,6 +63,7 @@ type podTGC struct {
 	netBatPairs            []util.BatPair
 	netPairResourceVersion string
 	stopper                chan struct{}
+	isRunning              int32
 	promRegistry           *prometheus.Registry
 	serversMap             map[string][]util.ServerImpl
 	mutex                  *sync.Mutex
@@ -233,12 +235,27 @@ func (tg *podTGC) StartTGC() {
 			}
 		},
 	})
-	go informer.Run(tg.stopper)
+	go func() {
+		atomic.StoreInt32(&(tg.isRunning), int32(1))
+		// informer Run blocks until informer is stopped
+		logrus.Infof("starting config map informer")
+		informer.Run(tg.stopper)
+		logrus.Infof("config map informer is stopped")
+		atomic.StoreInt32(&(tg.isRunning), int32(0))
+	}()
 }
 
 // StopTGC stop listening for config map changes and stop tgc for every pair
 func (tg *podTGC) StopTGC() {
 	close(tg.stopper)
+	tEnd := time.Now().Add(3 * time.Second)
+	for tEnd.After(time.Now()) {
+		if atomic.LoadInt32(&tg.isRunning) == 0 {
+			logrus.Infof("config map informer is no longer running, proceed to tearing down protocol clients and servers")
+			break
+		}
+		time.Sleep(600 * time.Millisecond)
+	}
 	tg.deleteNetBatTgenClients()
 	tg.stopServers()
 }
