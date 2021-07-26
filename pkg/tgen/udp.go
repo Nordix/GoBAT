@@ -230,6 +230,9 @@ func (c *udpStream) SocketRead() {
 			if serverInfo.Namespace != c.metricLabelMap[serverNamespaceStr] ||
 				serverInfo.Name != c.metricLabelMap[serverPodStr] ||
 				serverInfo.WorkerName != c.metricLabelMap[serverNodeStr] {
+				logrus.Infof("destination pod changed its property from %s to %s, reregister client %s metrics",
+					c.metricLabelMap[serverNodeStr]+"/"+c.metricLabelMap[serverNamespaceStr]+"/"+c.metricLabelMap[serverPodStr],
+					serverInfo.WorkerName+"/"+serverInfo.Namespace+"/"+serverInfo.Name, c.metricLabelMap["source"])
 				c.metricLabelMap[serverNamespaceStr] = serverInfo.Namespace
 				c.metricLabelMap[serverPodStr] = serverInfo.Name
 				c.metricLabelMap[serverNodeStr] = serverInfo.WorkerName
