@@ -66,26 +66,31 @@ const (
 )
 
 type udpStream struct {
-	isStopped         sync.WaitGroup
-	connection        *net.UDPConn
-	localAddr         *net.UDPAddr
-	pair              *util.BatPair
-	conf              *config
-	readBufferSize    int
-	packetSequence    int64
-	mutex             *sync.Mutex
-	msgHeaderLength   int
-	stop              bool
-	promRegistry      *prometheus.Registry
-	streamMetrics     []prometheus.Collector
-	metricLabelMap    map[string]string
-	trafficNotStarted prometheus.Counter
-	packetSent        prometheus.Counter
-	packetSendFailed  prometheus.Counter
-	packetReceived    prometheus.Counter
-	packetDropped     prometheus.Counter
-	roundTrip         prometheus.Counter
-	latency           prometheus.Summary
+	isStopped           sync.WaitGroup
+	connection          *net.UDPConn
+	localAddr           *net.UDPAddr
+	pair                *util.BatPair
+	conf                *config
+	readBufferSize      int
+	packetSequence      int64
+	mutex               *sync.Mutex
+	msgHeaderLength     int
+	stop                bool
+	promRegistry        *prometheus.Registry
+	streamMetrics       []prometheus.Collector
+	metricLabelMap      map[string]string
+	trafficNotStarted   prometheus.Counter
+	packetSent          prometheus.Counter
+	packetSentVal       float64
+	packetSendFailed    prometheus.Counter
+	packetSendFailedVal float64
+	packetReceived      prometheus.Counter
+	packetReceivedVal   float64
+	packetDropped       prometheus.Counter
+	packetDroppedVal    float64
+	roundTrip           prometheus.Counter
+	roundTripVal        float64
+	latency             prometheus.Summary
 }
 
 // SetupConnection sets up udp client connection
@@ -157,22 +162,38 @@ func (c *udpStream) registerMetric(metric prometheus.Collector) {
 func (c *udpStream) registerStreamMetrics() {
 	c.packetSent = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetSentStr, "total packet sent", c.metricLabelMap)
 	c.registerMetric(c.packetSent)
+	if c.packetSentVal > 0 {
+		c.packetSent.Add(c.packetSentVal)
+	}
 
 	c.packetSendFailed = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetSendFailedStr, "total packet send failed", c.metricLabelMap)
 	c.registerMetric(c.packetSendFailed)
+	if c.packetSendFailedVal > 0 {
+		c.packetSendFailed.Add(c.packetSendFailedVal)
+	}
 
 	c.packetReceived = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetReceivedStr, "total packet received", c.metricLabelMap)
 	c.registerMetric(c.packetReceived)
+	if c.packetReceivedVal > 0 {
+		c.packetReceived.Add(c.packetReceivedVal)
+	}
 
 	c.packetDropped = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, packetDroppedStr, "total packet dropped", c.metricLabelMap)
 	c.registerMetric(c.packetDropped)
+	if c.packetDroppedVal > 0 {
+		c.packetDropped.Add(c.packetDroppedVal)
+	}
 
 	c.roundTrip = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, roundTripTimeStr, "total round trip time", c.metricLabelMap)
 	c.registerMetric(c.roundTrip)
+	if c.roundTripVal > 0 {
+		c.roundTrip.Add(c.roundTripVal)
+	}
 
 	objectives := map[float64]float64{0.5: 0.05, 0.9: 0.02, 0.95: 0.01, 0.99: 0.005}
 	c.latency = util.NewSummary(util.PromNamespace, c.pair.TrafficProfile, latencyStr, "latency statistics", c.metricLabelMap, objectives)
 	c.registerMetric(c.latency)
+	// TODO: find an optimal way to restore latency summary metric for reregister case
 }
 
 func (c *udpStream) deRegisterStreamMetrics() {
@@ -223,8 +244,10 @@ func (c *udpStream) SocketRead() {
 			// logrus.Infof("%s-%s: processing message seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
 			roundTripTime := float64(util.GetTimestampMicroSec() - msg.SendTimeStamp)
 			c.roundTrip.Add(roundTripTime)
+			c.roundTripVal += roundTripTime
 			c.latency.Observe(roundTripTime)
 			c.packetReceived.Inc()
+			c.packetReceivedVal++
 			delete(c.pair.PendingRequestsMap, msg.SequenceNumber)
 			// if there is change in server namespace, pod and its hosted worker name, re register the stream metrics
 			if serverInfo.Namespace != c.metricLabelMap[serverNamespaceStr] ||
@@ -271,6 +294,7 @@ func (c *udpStream) HandleTimeouts() {
 				if (now - sendTimeStamp) > packetTimeoutinMicros {
 					// logrus.Infof("%s-%s: seq: %d, packet timed out: now %d- sendtime %d- timeout %d", c.pair.Source.Name, c.pair.Destination.Name, seq, now, sendTimeStamp, packetTimeoutinMicros)
 					c.packetDropped.Inc()
+					c.packetDroppedVal++
 					delete(c.pair.PendingRequestsMap, seq)
 					c.mutex.Unlock()
 					seq++
@@ -367,6 +391,7 @@ func (c *udpStream) StartPackets() {
 			newMsgByteArr, err := msgpack.Marshal(&baseMsg)
 			if err != nil {
 				c.packetSendFailed.Inc()
+				c.packetSendFailedVal++
 				logrus.Errorf("error in encoding the udp client message %v", err)
 				continue
 			}
@@ -380,10 +405,12 @@ func (c *udpStream) StartPackets() {
 				delete(c.pair.PendingRequestsMap, c.packetSequence)
 				c.mutex.Unlock()
 				c.packetSendFailed.Inc()
+				c.packetSendFailedVal++
 				logrus.Errorf("error in writing message %v to udp client connection: err %v", baseMsg, err)
 				continue
 			}
 			c.packetSent.Inc()
+			c.packetSentVal++
 			// logrus.Infof("%s-%s: message sent seq: %d, sendtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, sendTimeStamp)
 		}
 		/* Sleep for approx. one send interval */
