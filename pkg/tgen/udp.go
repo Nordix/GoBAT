@@ -18,9 +18,11 @@
 package tgen
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"strconv"
 	"sync"
@@ -121,13 +123,7 @@ func (c *udpStream) SetupConnection() error {
 		return err
 	}
 	c.pair.Destination.IP = raddr.IP.String()
-	var srcAddress string
-	if util.IsIPv6(c.pair.Source.IP) {
-		srcAddress = "[" + c.pair.Source.IP + "]:0"
-	} else {
-		srcAddress = c.pair.Source.IP + ":0"
-	}
-	laddr, err := net.ResolveUDPAddr("udp", srcAddress)
+	laddr, err := net.ResolveUDPAddr("udp", util.GetResolvableAddress(c.pair.Source.IP))
 	if err != nil {
 		c.trafficNotStarted.Inc()
 		return err
@@ -232,6 +228,10 @@ func (c *udpStream) SocketRead() {
 				logrus.Errorf("error in decoding the packet at udp client err %v: %v", err, err1)
 				continue
 			}
+			if msg.SequenceNumber == -1 {
+				// reply for test packet. ignore handling it.
+				continue
+			}
 			// logrus.Infof("%s-%s: message received seq: %d, sendtimestamp: %d, respondtimestamp: %d", c.pair.Source.Name, c.pair.Destination.Name, c.packetSequence, msg.SendTimeStamp, msg.RespondTimeStamp)
 			c.mutex.Lock()
 			_, exists := c.pair.PendingRequestsMap[msg.SequenceNumber]
@@ -312,7 +312,7 @@ func (c *udpStream) HandleTimeouts() {
 					if c.pair.Destination.IsDN &&
 						((startTimeout > 0 && (util.GetTimestampMicroSec()-startTimeout) > redialTimeoutinMicros) ||
 							timedoutPktCount > redialTimeoutSuccessiveRequests) {
-						err := c.redialDestination()
+						err := c.redialDestination(false)
 						if err != nil {
 							startTimeout = 0
 							logrus.Errorf("error redialling destination %s: %v", c.pair.Destination.Name, err)
@@ -341,6 +341,37 @@ func (c *udpStream) HandleTimeouts() {
 	}
 }
 
+// sendTestPackets sends test packets would help to choose random server ip for DN scenario
+func (c *udpStream) sendTestPackets(payload []byte, sendInterval int) error {
+	if !c.pair.Destination.IsDN {
+		return nil
+	}
+	testMsg := util.NewMessage(-1, util.GetTimestampMicroSec(), c.conf.packetSize)
+	testByteArr, err := msgpack.Marshal(&testMsg)
+	if err != nil {
+		return err
+	}
+	testByteArr = append(testByteArr, payload...)
+	countBig, err := rand.Int(rand.Reader, big.NewInt(100))
+	if err != nil {
+		return err
+	}
+	count := countBig.Int64()
+	var i int64
+	for i = 0; i < count; i++ {
+		_, err = c.connection.Write(testByteArr)
+		if err != nil {
+			return err
+		}
+		err = c.redialDestination(true)
+		if err != nil {
+			return err
+		}
+		time.Sleep(util.MicroSecToDuration(sendInterval))
+	}
+	return nil
+}
+
 // StartPackets start sending packet as per the udp configuration
 func (c *udpStream) StartPackets() {
 	payLoadSize := c.conf.packetSize - c.msgHeaderLength
@@ -367,6 +398,9 @@ func (c *udpStream) StartPackets() {
 	interval := util.SecToMicroSec(1) / c.conf.sendRate
 	start := util.GetTimestampMicroSec()
 	var pausePeriod int64
+	if err = c.sendTestPackets(payload, interval); err != nil {
+		logrus.Errorf("error sending test packets: %v", err)
+	}
 	for {
 		if c.stop {
 			c.isStopped.Done()
@@ -378,10 +412,8 @@ func (c *udpStream) StartPackets() {
 			pausePeriod += (util.GetTimestampMicroSec() - t1)
 			continue
 		}
-
 		/* Calculate how many packet to send in this interval */
 		targetSeq := ((util.GetTimestampMicroSec() - start - pausePeriod) * int64(c.conf.sendRate)) / 1000000
-
 		/* Send the needed packets */
 		for c.packetSequence < targetSeq {
 			c.packetSequence++
@@ -418,14 +450,20 @@ func (c *udpStream) StartPackets() {
 	}
 }
 
-func (c *udpStream) redialDestination() error {
+func (c *udpStream) redialDestination(force bool) error {
 	raddr, err := net.ResolveUDPAddr("udp", c.pair.Destination.Name+":"+strconv.Itoa(tapp.UDPServerPort))
 	if err != nil {
 		return err
 	}
 	remoteIP := raddr.IP.String()
-	if remoteIP == c.pair.Destination.IP {
+	if remoteIP == c.pair.Destination.IP && !force {
 		return nil
+	} else if force {
+		laddr, err := net.ResolveUDPAddr("udp", util.GetResolvableAddress(c.pair.Source.IP))
+		if err != nil {
+			return err
+		}
+		c.localAddr = laddr
 	}
 	err = c.connection.Close()
 	if err != nil {

@@ -217,6 +217,16 @@ func RegisterPromHandler(promPort int, reg *prometheus.Registry) {
 	}
 }
 
+// GetResolvableAddress get resolvable address for given ip address
+func GetResolvableAddress(ip string) (address string) {
+	if IsIPv6(ip) {
+		address = "[" + ip + "]:0"
+	} else {
+		address = ip + ":0"
+	}
+	return
+}
+
 // IsIPv6 to check ipAddress is either ipv6 or not
 func IsIPv6(ipAddress string) bool {
 	ip := net.ParseIP(ipAddress)
