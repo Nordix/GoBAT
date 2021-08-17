@@ -25,6 +25,7 @@ import (
 	"math/big"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -250,8 +251,7 @@ func (c *udpStream) SocketRead() {
 			c.packetReceivedVal++
 			delete(c.pair.PendingRequestsMap, msg.SequenceNumber)
 			// if there is change in server namespace, pod and its hosted worker name, re register the stream metrics
-			if serverInfo.Namespace != c.metricLabelMap[serverNamespaceStr] ||
-				serverInfo.Name != c.metricLabelMap[serverPodStr] ||
+			if serverInfo.Namespace != c.metricLabelMap[serverNamespaceStr] || serverInfo.Name != c.metricLabelMap[serverPodStr] ||
 				serverInfo.WorkerName != c.metricLabelMap[serverNodeStr] {
 				logrus.Infof("destination pod changed its property from %s to %s, reregister client %s metrics",
 					c.metricLabelMap[serverNodeStr]+"/"+c.metricLabelMap[serverNamespaceStr]+"/"+c.metricLabelMap[serverPodStr],
@@ -341,9 +341,10 @@ func (c *udpStream) HandleTimeouts() {
 	}
 }
 
-// sendTestPackets sends test packets would help to choose random server ip for DN scenario
-func (c *udpStream) sendTestPackets(payload []byte, sendInterval int) error {
-	if !c.pair.Destination.IsDN {
+// sendDummyPackets sends dummy packets that help randomizing the kube-proxy endpoint selection
+// in the case of K8s service destinations.
+func (c *udpStream) sendDummyPackets(payload []byte, sendInterval int) error {
+	if !strings.Contains(strings.ToLower(c.pair.TrafficScenario), "service") {
 		return nil
 	}
 	testMsg := util.NewMessage(-1, util.GetTimestampMicroSec(), c.conf.packetSize)
@@ -352,7 +353,7 @@ func (c *udpStream) sendTestPackets(payload []byte, sendInterval int) error {
 		return err
 	}
 	testByteArr = append(testByteArr, payload...)
-	countBig, err := rand.Int(rand.Reader, big.NewInt(100))
+	countBig, err := rand.Int(rand.Reader, big.NewInt(10))
 	if err != nil {
 		return err
 	}
@@ -363,6 +364,8 @@ func (c *udpStream) sendTestPackets(payload []byte, sendInterval int) error {
 		if err != nil {
 			return err
 		}
+		// forced redial is essential here to create independent requests to be load-balanced
+		// by kube-proxy to different service endpoints.
 		err = c.redialDestination(true)
 		if err != nil {
 			return err
@@ -398,7 +401,7 @@ func (c *udpStream) StartPackets() {
 	interval := util.SecToMicroSec(1) / c.conf.sendRate
 	start := util.GetTimestampMicroSec()
 	var pausePeriod int64
-	if err = c.sendTestPackets(payload, interval); err != nil {
+	if err = c.sendDummyPackets(payload, interval); err != nil {
 		logrus.Errorf("error sending test packets: %v", err)
 	}
 	for {
@@ -469,7 +472,7 @@ func (c *udpStream) redialDestination(force bool) error {
 	if err != nil {
 		logrus.Warnf("error closing stale udp client connection %s: %v", c.connection.LocalAddr().String(), err)
 	}
-	logrus.Infof("destination %s changed its ip address to %s, redialling", c.pair.Destination.Name, remoteIP)
+	logrus.Infof("redialling %s with its ip address %s", c.pair.Destination.Name, remoteIP)
 	conn, err := net.DialUDP("udp", c.localAddr, raddr)
 	if err != nil {
 		return err
