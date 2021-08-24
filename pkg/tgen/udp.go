@@ -97,7 +97,7 @@ type udpStream struct {
 }
 
 // SetupConnection sets up udp client connection
-func (c *udpStream) SetupConnection() error {
+func (c *udpStream) SetupConnection() (connectErr error) {
 	c.metricLabelMap = make(map[string]string)
 	c.metricLabelMap["destination"] = c.pair.Destination.Name
 	c.metricLabelMap["scenario"] = c.pair.TrafficScenario
@@ -106,6 +106,13 @@ func (c *udpStream) SetupConnection() error {
 	source, _ := json.Marshal(c.pair.Source)
 	c.metricLabelMap["source"] = string(source)
 	c.trafficNotStarted = util.NewCounter(util.PromNamespace, c.pair.TrafficProfile, trafficNotStartedStr, "traffic not started", c.metricLabelMap)
+
+	defer func() {
+		// recover from panic which can occur with promRegistry.MustRegister
+		if r := recover(); r != nil {
+			connectErr = fmt.Errorf("%v", r)
+		}
+	}()
 	c.promRegistry.MustRegister(c.trafficNotStarted)
 
 	var destAddress string
@@ -121,24 +128,28 @@ func (c *udpStream) SetupConnection() error {
 	raddr, err := net.ResolveUDPAddr("udp", destAddress)
 	if err != nil {
 		c.trafficNotStarted.Inc()
-		return err
+		connectErr = err
+		return
 	}
 	c.pair.Destination.IP = raddr.IP.String()
 	laddr, err := net.ResolveUDPAddr("udp", util.GetResolvableAddress(c.pair.Source.IP))
 	if err != nil {
 		c.trafficNotStarted.Inc()
-		return err
+		connectErr = err
+		return
 	}
 	logrus.Infof("udp local address: %s, server address: %s connecting ", laddr.String(), c.pair.Destination.IP)
 	conn, err := net.DialUDP("udp", laddr, raddr)
 	if err != nil {
 		c.trafficNotStarted.Inc()
-		return err
+		connectErr = err
+		return
 	}
 	// set read buffer size into 512KB
 	err = conn.SetReadBuffer(512 * 1024)
 	if err != nil {
-		return err
+		connectErr = err
+		return
 	}
 	c.connection = conn
 	c.localAddr = laddr
@@ -148,7 +159,7 @@ func (c *udpStream) SetupConnection() error {
 	c.metricLabelMap[serverNodeStr] = ""
 	c.registerStreamMetrics()
 
-	return nil
+	return
 }
 
 func (c *udpStream) registerMetric(metric prometheus.Collector) {
