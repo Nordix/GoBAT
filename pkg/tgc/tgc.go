@@ -417,12 +417,15 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 			continue
 		}
 		if source.Net != "" {
+			ipFound := false
 			if srcIface, ok := netIfNameMap[namespace+"/"+source.Net]; ok {
 				source.Interface = srcIface
 				if srcIfaceIPAddress, ok := ifNameAddressMap[srcIface]; ok {
+					ipFound = true
 					source.IP = srcIfaceIPAddress
 				}
-			} else {
+			}
+			if !ipFound {
 				logrus.Errorf("no interface present for given source network %s", source.Net)
 			}
 		} else if source.Interface != "" {
