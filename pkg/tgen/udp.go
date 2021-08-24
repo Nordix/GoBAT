@@ -132,7 +132,13 @@ func (c *udpStream) SetupConnection() (connectErr error) {
 		return
 	}
 	c.pair.Destination.IP = raddr.IP.String()
-	laddr, err := net.ResolveUDPAddr("udp", util.GetResolvableAddress(c.pair.Source.IP))
+	srcAddress, err := util.GetResolvableAddress(c.pair.Source.IP)
+	if err != nil {
+		c.trafficNotStarted.Inc()
+		connectErr = err
+		return
+	}
+	laddr, err := net.ResolveUDPAddr("udp", srcAddress)
 	if err != nil {
 		c.trafficNotStarted.Inc()
 		connectErr = err
@@ -159,7 +165,7 @@ func (c *udpStream) SetupConnection() (connectErr error) {
 	c.metricLabelMap[serverNodeStr] = ""
 	c.registerStreamMetrics()
 
-	return
+	return nil
 }
 
 func (c *udpStream) registerMetric(metric prometheus.Collector) {
@@ -473,7 +479,11 @@ func (c *udpStream) redialDestination(force bool) error {
 	if remoteIP == c.pair.Destination.IP && !force {
 		return nil
 	} else if force {
-		laddr, err := net.ResolveUDPAddr("udp", util.GetResolvableAddress(c.pair.Source.IP))
+		srcAddress, err := util.GetResolvableAddress(c.pair.Source.IP)
+		if err != nil {
+			return err
+		}
+		laddr, err := net.ResolveUDPAddr("udp", srcAddress)
 		if err != nil {
 			return err
 		}
