@@ -434,14 +434,13 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 			} else {
 				logrus.Errorf("no interface present for given source interface name %s", source.Interface)
 			}
-		} else if source.IP == "" {
-			// assign primary network eth0 interface ip address
+		} else {
+			// primary network, assign eth0 interface ip address
 			if srcIfaceIPAddress, ok := ifNameAddressMap["eth0"]; ok {
 				source.IP = srcIfaceIPAddress
 				source.Interface = "eth0"
 			} else {
-				logrus.Errorf("source doesn't have primary interface in the pair %s, ignoring", pair)
-				continue
+				logrus.Errorf("source doesn't have primary interface eth0 in the pair %s", pair)
 			}
 		}
 		elements = trimSlice(strings.Split(elements[1], ","))
