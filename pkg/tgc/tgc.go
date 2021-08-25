@@ -311,7 +311,9 @@ func (tg *podTGC) createNetBatTgenClients() {
 			p.ClientConnection = client
 			err = p.ClientConnection.SetupConnection()
 			if err != nil {
-				logrus.Errorf("error in setting up the connection for pair %v: %v", p, err)
+				source, _ := json.Marshal(p.Source)
+				logrus.Errorf("error in setting up the connection for pair %s-%v-%s-%s: %v", string(source),
+					*p.Destination, p.TrafficProfile, p.TrafficScenario, err)
 				return
 			}
 			go p.ClientConnection.HandleTimeouts()
@@ -415,25 +417,30 @@ func getAvailableNetBatPairings(namespace, podName, pairingStr string) ([]util.B
 			continue
 		}
 		if source.Net != "" {
+			ipFound := false
 			if srcIface, ok := netIfNameMap[namespace+"/"+source.Net]; ok {
 				source.Interface = srcIface
 				if srcIfaceIPAddress, ok := ifNameAddressMap[srcIface]; ok {
+					ipFound = true
 					source.IP = srcIfaceIPAddress
 				}
+			}
+			if !ipFound {
+				logrus.Errorf("no interface present for given source network %s", source.Net)
 			}
 		} else if source.Interface != "" {
 			if srcIfaceIPAddress, ok := ifNameAddressMap[source.Interface]; ok {
 				source.IP = srcIfaceIPAddress
+			} else {
+				logrus.Errorf("no interface present for given source interface name %s", source.Interface)
 			}
-		}
-		if source.IP == "" {
-			// assign primary network eth0 interface ip address
+		} else {
+			// primary network, assign eth0 interface ip address
 			if srcIfaceIPAddress, ok := ifNameAddressMap["eth0"]; ok {
 				source.IP = srcIfaceIPAddress
 				source.Interface = "eth0"
 			} else {
-				logrus.Errorf("source doesn't have primary interface in the pair %s, ignoring", pair)
-				continue
+				logrus.Errorf("source doesn't have primary interface eth0 in the pair %s", pair)
 			}
 		}
 		elements = trimSlice(strings.Split(elements[1], ","))
