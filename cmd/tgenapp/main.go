@@ -28,6 +28,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -69,9 +70,7 @@ func main() {
 		syscall.SIGQUIT)
 	done := make(chan bool, 1)
 
-	if err := initializeLog(LogFile); err != nil {
-		panic(err)
-	}
+	initializeLog(LogFile)
 
 	goMaxProcs := os.Getenv("GOMAXPROCS")
 
@@ -137,13 +136,15 @@ func getClient() kubernetes.Interface {
 	return clientset
 }
 
-func initializeLog(logFile string) error {
-	f, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
-	if err != nil {
-		return err
+func initializeLog(logFile string) {
+	fileLogger := &lumberjack.Logger{
+		Filename:   logFile,
+		MaxSize:    10,   // MB
+		MaxBackups: 10,   // no of files
+		MaxAge:     2,    // days
+		Compress:   true, // disabled by default
 	}
-	mw := io.MultiWriter(os.Stdout, f)
 	logrus.SetFormatter(&logrus.TextFormatter{TimestampFormat: time.StampMicro})
-	logrus.SetOutput(mw)
-	return nil
+	logrus.SetOutput(io.MultiWriter(os.Stdout, fileLogger))
+	logrus.SetLevel(logrus.InfoLevel)
 }
