@@ -55,7 +55,6 @@ const (
 // podTGC pod traffic controller
 type podTGC struct {
 	clientSet              kubernetes.Interface
-	socketReadBufferSize   int
 	config                 util.Config
 	podName                string
 	nodeName               string
@@ -87,10 +86,9 @@ func RegisterProtocolClient(protocol string, client util.ProtocolClientModule) {
 
 // NewPodTGController creates traffic gen controller for the pod
 func NewPodTGController(clientSet kubernetes.Interface, podName, nodeName, namespace string,
-	readBufferSize *int, stopper chan struct{}, reg *prometheus.Registry) TGController {
-	return &podTGC{clientSet: clientSet, socketReadBufferSize: *readBufferSize,
-		podName: podName, nodeName: nodeName, namespace: namespace,
-		stopper: stopper, promRegistry: reg, mutex: &sync.Mutex{},
+	stopper chan struct{}, reg *prometheus.Registry) TGController {
+	return &podTGC{clientSet: clientSet, podName: podName, nodeName: nodeName,
+		namespace: namespace, stopper: stopper, promRegistry: reg, mutex: &sync.Mutex{},
 		serversMap: make(map[string][]util.ServerImpl)}
 }
 
@@ -136,7 +134,7 @@ func (tg *podTGC) StartTGC() {
 					for ifName, ip := range ifNameAddressMap {
 						logrus.Infof("creating %s server for %s:%s", protocol, ifName, ip)
 						server, err := (*sm).CreateServer(tg.namespace, tg.podName, tg.nodeName, ip,
-							ifName, tg.socketReadBufferSize, tg.promRegistry)
+							ifName, tg.promRegistry)
 						if err != nil {
 							logrus.Errorf("error creating server on ip address %s: %v", ip, err)
 							continue
@@ -303,7 +301,7 @@ func (tg *podTGC) createNetBatTgenClients() {
 				logrus.Errorf("error getting protocol client for pair %v", p)
 				return
 			}
-			client, err := (*protoClients[p.TrafficProfile]).CreateClient(p, tg.socketReadBufferSize, tg.promRegistry)
+			client, err := (*protoClients[p.TrafficProfile]).CreateClient(p, tg.promRegistry)
 			if err != nil {
 				logrus.Errorf("error creating client for pair %v: %v", p, err)
 				return

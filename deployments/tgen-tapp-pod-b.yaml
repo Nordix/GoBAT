@@ -26,8 +26,6 @@ spec:
     imagePullPolicy: IfNotPresent
     command:
     - tgenapp
-    args:
-    - -readbufsize=9000
     env:
       - name: NODE_NAME
         valueFrom:
