@@ -215,15 +215,15 @@ func (c *udpStream) reRegisterStreamMetrics() {
 
 // SocketRead read from udp client socket
 func (c *udpStream) SocketRead() {
-	receiveBufSize := c.msgHeaderLength + c.conf.packetSize
-	logrus.Infof("udp tgen client read buffer size %d", receiveBufSize)
-	receivedByteArr := make([]byte, receiveBufSize)
+	readBufSize := c.msgHeaderLength + c.conf.packetSize
+	logrus.Infof("udp tgen client read buffer size %d", readBufSize)
+	readByteArr := make([]byte, readBufSize)
 	for {
 		if c.stop {
 			c.isStopped.Done()
 			return
 		}
-		size, _, err := c.connection.ReadFromUDP(receivedByteArr)
+		size, _, err := c.connection.ReadFromUDP(readByteArr)
 		if err != nil {
 			logrus.Debugf("error reading message from the udp client connection %v: err %v", c.connection, err)
 			continue
@@ -233,8 +233,8 @@ func (c *udpStream) SocketRead() {
 				msg        util.Message
 				serverInfo util.PodInfo
 			)
-			err := msgpack.Unmarshal(receivedByteArr[:c.msgHeaderLength], &msg)
-			err1 := msgpack.Unmarshal(receivedByteArr[c.msgHeaderLength:c.msgHeaderLength+msg.ServerInfoLength], &serverInfo)
+			err := msgpack.Unmarshal(readByteArr[:c.msgHeaderLength], &msg)
+			err1 := msgpack.Unmarshal(readByteArr[c.msgHeaderLength:c.msgHeaderLength+msg.ServerInfoLength], &serverInfo)
 			if err != nil || err1 != nil {
 				logrus.Errorf("error in decoding the packet at udp client err %v: %v", err, err1)
 				continue

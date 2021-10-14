@@ -47,10 +47,15 @@ const (
 )
 
 const (
-	DefaultUDPPacketSize     = 1000
-	DefaultUDPPacketTimeout  = 5
-	DefaultUDPSendRate       = 500
-	DefaultUDPRedialTimeout  = 5
+	// DefaultUDPPacketSize default udp packet size
+	DefaultUDPPacketSize = 1000
+	// DefaultUDPPacketTimeout default udp packet timeout
+	DefaultUDPPacketTimeout = 5
+	// DefaultUDPSendRate default udp send rate
+	DefaultUDPSendRate = 500
+	// DefaultUDPRedialTimeout default udp redial timeout
+	DefaultUDPRedialTimeout = 5
+	// DefaultSocketReadBufSize default udp socket read buffer size
 	DefaultSocketReadBufSize = 512 * 1024
 )
 
@@ -151,22 +156,22 @@ func (s *udpServer) HandleIdleConnections() {
 
 // ReadFromSocket read packets from server socket and writes into the channel
 func (s *udpServer) ReadFromSocket() {
-	receiveBufSize := s.msgHeaderLength + s.conf.packetSize
-	logrus.Infof("tapp udp server receive buffer size %d", receiveBufSize)
-	receivedByteArr := make([]byte, receiveBufSize)
+	readBufSize := s.msgHeaderLength + s.conf.packetSize
+	logrus.Infof("tapp udp server receive buffer size %d", readBufSize)
+	readByteArr := make([]byte, readBufSize)
 	for {
 		if s.stop {
 			s.isStopped.Done()
 			return
 		}
-		size, addr, err := s.connection.ReadFromUDP(receivedByteArr)
+		size, addr, err := s.connection.ReadFromUDP(readByteArr)
 		if err != nil {
 			logrus.Errorf("error reading message from the udp server connection %v: err %v", s.connection, err)
 			continue
 		}
 		if size > 0 {
 			var msg util.Message
-			err := msgpack.Unmarshal(receivedByteArr[:s.msgHeaderLength], &msg)
+			err := msgpack.Unmarshal(readByteArr[:s.msgHeaderLength], &msg)
 			if err != nil {
 				logrus.Errorf("error in decoding the packet at udp server err %v", err)
 				continue
@@ -179,8 +184,8 @@ func (s *udpServer) ReadFromSocket() {
 				logrus.Errorf("error in encoding the udp server response message %v", err)
 				continue
 			}
-			copy(receivedByteArr, byteArr)
-			copy(receivedByteArr[len(byteArr):], s.podInfoByteArr)
+			copy(readByteArr, byteArr)
+			copy(readByteArr[len(byteArr):], s.podInfoByteArr)
 			pktLength := len(byteArr) + len(s.podInfoByteArr)
 			if msg.Length < pktLength {
 				msg.Length = pktLength
@@ -203,7 +208,7 @@ func (s *udpServer) ReadFromSocket() {
 			}
 			s.mutex.Unlock()
 			// logrus.Infof("responding to messgage seq: %d, sendtimestamp: %d, respondtimestamp: %d", msg.SequenceNumber, msg.SendTimeStamp, msg.RespondTimeStamp)
-			_, err = s.connection.WriteToUDP(receivedByteArr[:msg.Length], addr)
+			_, err = s.connection.WriteToUDP(readByteArr[:msg.Length], addr)
 			if err != nil {
 				logrus.Errorf("error in writing message %v back to udp client connection: err %v", msg, err)
 				continue
