@@ -61,20 +61,12 @@ const (
 	serverNodeStr = "server_node"
 )
 
-const (
-	defaultUDPPacketSize    = 1000
-	defaultUDPPacketTimeout = 5
-	defaultUDPSendRate      = 500
-	defaultUDPRedialTimeout = 5
-)
-
 type udpStream struct {
 	isStopped           sync.WaitGroup
 	connection          *net.UDPConn
 	localAddr           *net.UDPAddr
 	pair                *util.BatPair
 	conf                *config
-	readBufferSize      int
 	packetSequence      int64
 	mutex               *sync.Mutex
 	msgHeaderLength     int
@@ -223,14 +215,15 @@ func (c *udpStream) reRegisterStreamMetrics() {
 
 // SocketRead read from udp client socket
 func (c *udpStream) SocketRead() {
-	logrus.Infof("udp tgen client read buffer size %d", c.readBufferSize)
-	receivedByteArr := make([]byte, c.readBufferSize)
+	readBufSize := c.msgHeaderLength + c.conf.packetSize
+	logrus.Infof("udp tgen client read buffer size %d", readBufSize)
+	readByteArr := make([]byte, readBufSize)
 	for {
 		if c.stop {
 			c.isStopped.Done()
 			return
 		}
-		size, _, err := c.connection.ReadFromUDP(receivedByteArr)
+		size, _, err := c.connection.ReadFromUDP(readByteArr)
 		if err != nil {
 			logrus.Debugf("error reading message from the udp client connection %v: err %v", c.connection, err)
 			continue
@@ -240,8 +233,8 @@ func (c *udpStream) SocketRead() {
 				msg        util.Message
 				serverInfo util.PodInfo
 			)
-			err := msgpack.Unmarshal(receivedByteArr[:c.msgHeaderLength], &msg)
-			err1 := msgpack.Unmarshal(receivedByteArr[c.msgHeaderLength:c.msgHeaderLength+msg.ServerInfoLength], &serverInfo)
+			err := msgpack.Unmarshal(readByteArr[:c.msgHeaderLength], &msg)
+			err1 := msgpack.Unmarshal(readByteArr[c.msgHeaderLength:c.msgHeaderLength+msg.ServerInfoLength], &serverInfo)
 			if err != nil || err1 != nil {
 				logrus.Errorf("error in decoding the packet at udp client err %v: %v", err, err1)
 				continue
@@ -538,12 +531,12 @@ type config struct {
 }
 
 // CreateClient create client implementation for the given protocol
-func (cm *udpClient) CreateClient(p *util.BatPair, readBufferSize int, reg *prometheus.Registry) (util.ClientImpl, error) {
-	return cm.newStream(p, readBufferSize, reg), nil
+func (cm *udpClient) CreateClient(p *util.BatPair, reg *prometheus.Registry) (util.ClientImpl, error) {
+	return cm.newStream(p, reg), nil
 }
 
 // newStream creates a new udp stream for the given pair
-func (cm *udpClient) newStream(p *util.BatPair, readBufferSize int, reg *prometheus.Registry) util.ClientImpl {
+func (cm *udpClient) newStream(p *util.BatPair, reg *prometheus.Registry) util.ClientImpl {
 	stream := &udpStream{pair: p, mutex: &sync.Mutex{}, stop: false}
 	stream.isStopped.Add(3)
 	msgHeaderLength, err := util.GetMessageHeaderLength()
@@ -553,7 +546,6 @@ func (cm *udpClient) newStream(p *util.BatPair, readBufferSize int, reg *prometh
 	stream.msgHeaderLength = msgHeaderLength
 	stream.promRegistry = reg
 	stream.streamMetrics = make([]prometheus.Collector, 0)
-	stream.readBufferSize = readBufferSize
 	stream.conf = cm.conf
 	return stream
 }
@@ -627,8 +619,8 @@ func (cm *udpClient) parseIntValue(value string) (int, error) {
 func init() {
 	client := &udpClient{}
 	// default config
-	client.conf = &config{sendRate: defaultUDPSendRate, packetSize: defaultUDPPacketSize,
-		redialTimeout: defaultUDPRedialTimeout, packetTimeout: defaultUDPPacketTimeout,
-		suspendTraffic: false}
+	client.conf = &config{sendRate: tapp.DefaultUDPSendRate, packetSize: tapp.DefaultUDPPacketSize,
+		redialTimeout: tapp.DefaultUDPRedialTimeout, packetTimeout: tapp.DefaultUDPPacketTimeout,
+		socketReadBufSize: tapp.DefaultSocketReadBufSize, suspendTraffic: false}
 	tgc.RegisterProtocolClient(tapp.UDPProtocolStr, client)
 }

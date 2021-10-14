@@ -54,7 +54,6 @@ var (
 )
 
 func main() {
-	readBufferSize := flag.Int("readbufsize", 1000, "socket read buffer size")
 	promPort := flag.Int("promport", 2212, "prometheus http endpoint port number")
 	flag.BoolVar(&showVersion, "version", false, "print version format=<tag>-<git-commit-id-short>")
 	flag.Parse()
@@ -106,7 +105,7 @@ func main() {
 	clientSet := getClient()
 
 	stopper := make(chan struct{})
-	tgController := tgc.NewPodTGController(clientSet, podName, nodeName, namespace, readBufferSize, stopper, reg)
+	tgController := tgc.NewPodTGController(clientSet, podName, nodeName, namespace, stopper, reg)
 	tgController.StartTGC()
 
 	go func() {

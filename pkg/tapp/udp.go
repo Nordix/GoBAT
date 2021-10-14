@@ -46,10 +46,22 @@ const (
 	srvPacketsLateStr      = "srv_packets_late"
 )
 
+const (
+	// DefaultUDPPacketSize default udp packet size
+	DefaultUDPPacketSize = 1000
+	// DefaultUDPPacketTimeout default udp packet timeout
+	DefaultUDPPacketTimeout = 5
+	// DefaultUDPSendRate default udp send rate
+	DefaultUDPSendRate = 500
+	// DefaultUDPRedialTimeout default udp redial timeout
+	DefaultUDPRedialTimeout = 5
+	// DefaultSocketReadBufSize default udp socket read buffer size
+	DefaultSocketReadBufSize = 512 * 1024
+)
+
 type udpServer struct {
 	Server              util.Server
 	conf                *config
-	readBufferSize      int
 	podInfoByteArr      []byte
 	connection          *net.UDPConn
 	isStopped           sync.WaitGroup
@@ -144,21 +156,22 @@ func (s *udpServer) HandleIdleConnections() {
 
 // ReadFromSocket read packets from server socket and writes into the channel
 func (s *udpServer) ReadFromSocket() {
-	logrus.Infof("tapp udp server read buffer size %d", s.readBufferSize)
-	receivedByteArr := make([]byte, s.readBufferSize)
+	readBufSize := s.msgHeaderLength + s.conf.packetSize
+	logrus.Infof("tapp udp server receive buffer size %d", readBufSize)
+	readByteArr := make([]byte, readBufSize)
 	for {
 		if s.stop {
 			s.isStopped.Done()
 			return
 		}
-		size, addr, err := s.connection.ReadFromUDP(receivedByteArr)
+		size, addr, err := s.connection.ReadFromUDP(readByteArr)
 		if err != nil {
 			logrus.Errorf("error reading message from the udp server connection %v: err %v", s.connection, err)
 			continue
 		}
 		if size > 0 {
 			var msg util.Message
-			err := msgpack.Unmarshal(receivedByteArr[:s.msgHeaderLength], &msg)
+			err := msgpack.Unmarshal(readByteArr[:s.msgHeaderLength], &msg)
 			if err != nil {
 				logrus.Errorf("error in decoding the packet at udp server err %v", err)
 				continue
@@ -171,8 +184,8 @@ func (s *udpServer) ReadFromSocket() {
 				logrus.Errorf("error in encoding the udp server response message %v", err)
 				continue
 			}
-			copy(receivedByteArr, byteArr)
-			copy(receivedByteArr[len(byteArr):], s.podInfoByteArr)
+			copy(readByteArr, byteArr)
+			copy(readByteArr[len(byteArr):], s.podInfoByteArr)
 			pktLength := len(byteArr) + len(s.podInfoByteArr)
 			if msg.Length < pktLength {
 				msg.Length = pktLength
@@ -195,7 +208,7 @@ func (s *udpServer) ReadFromSocket() {
 			}
 			s.mutex.Unlock()
 			// logrus.Infof("responding to messgage seq: %d, sendtimestamp: %d, respondtimestamp: %d", msg.SequenceNumber, msg.SendTimeStamp, msg.RespondTimeStamp)
-			_, err = s.connection.WriteToUDP(receivedByteArr[:msg.Length], addr)
+			_, err = s.connection.WriteToUDP(readByteArr[:msg.Length], addr)
 			if err != nil {
 				logrus.Errorf("error in writing message %v back to udp client connection: err %v", msg, err)
 				continue
@@ -227,12 +240,13 @@ type udpProtoServerModule struct {
 
 type config struct {
 	socketReadBufSize int
+	packetSize        int
 }
 
 // CreateServer creates a new udp echo server
-func (sm *udpProtoServerModule) CreateServer(namespace, podName, nodeName, ipAddress, ifName string, readBufferSize int,
+func (sm *udpProtoServerModule) CreateServer(namespace, podName, nodeName, ipAddress, ifName string,
 	reg *prometheus.Registry) (util.ServerImpl, error) {
-	udpServer := sm.newUDPServer(namespace, podName, nodeName, ipAddress, readBufferSize, reg)
+	udpServer := sm.newUDPServer(namespace, podName, nodeName, ipAddress, reg)
 	err := udpServer.SetupServerConnection()
 	if err != nil {
 		return nil, err
@@ -256,8 +270,13 @@ func (sm *udpProtoServerModule) LoadBatProfileConfig(profileMap map[string]map[s
 			if err != nil {
 				return fmt.Errorf("parsing udp-socket-read-buf-size failed: err %v", err)
 			}
-		} else {
-			sm.conf.socketReadBufSize = 512 * 1024
+		}
+
+		if val, ok := udpEntry["packet-size"]; ok {
+			sm.conf.packetSize, err = sm.parseIntValue(val)
+			if err != nil {
+				return fmt.Errorf("parsing udp-packet-size failed: err %v", err)
+			}
 		}
 	}
 
@@ -274,10 +293,9 @@ func (sm *udpProtoServerModule) parseIntValue(value string) (int, error) {
 	return valueInt, nil
 }
 
-func (sm *udpProtoServerModule) newUDPServer(namespace, podName, workerName, ipAddress string, readBufferSize int,
-	reg *prometheus.Registry) util.ServerImpl {
+func (sm *udpProtoServerModule) newUDPServer(namespace, podName, workerName, ipAddress string, reg *prometheus.Registry) util.ServerImpl {
 	udpServer := &udpServer{Server: util.Server{PodInfo: util.PodInfo{Namespace: namespace, Name: podName, WorkerName: workerName},
-		IPAddress: ipAddress, Port: UDPServerPort}, readBufferSize: readBufferSize, stop: false, mutex: &sync.Mutex{}}
+		IPAddress: ipAddress, Port: UDPServerPort}, stop: false, mutex: &sync.Mutex{}}
 	udpServer.isStopped.Add(2)
 	msgHeaderLength, err := util.GetMessageHeaderLength()
 	if err != nil {
@@ -296,5 +314,6 @@ func (sm *udpProtoServerModule) newUDPServer(namespace, podName, workerName, ipA
 }
 
 func init() {
-	tgc.RegisterProtocolServer(UDPProtocolStr, &udpProtoServerModule{&config{}})
+	tgc.RegisterProtocolServer(UDPProtocolStr, &udpProtoServerModule{&config{socketReadBufSize: DefaultSocketReadBufSize,
+		packetSize: DefaultUDPPacketSize}})
 }

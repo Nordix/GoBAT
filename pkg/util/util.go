@@ -123,13 +123,13 @@ type ClientImpl interface {
 
 // ProtocolServerModule contract to create protocol servers and loading its config
 type ProtocolServerModule interface {
-	CreateServer(namespace, podName, nodeName, ipAddress, ifName string, readBufferSize int, reg *prometheus.Registry) (ServerImpl, error)
+	CreateServer(namespace, podName, nodeName, ipAddress, ifName string, reg *prometheus.Registry) (ServerImpl, error)
 	LoadBatProfileConfig(profileMap map[string]map[string]string) error
 }
 
 // ProtocolClientModule contract to create protocol clients and loading its config
 type ProtocolClientModule interface {
-	CreateClient(p *BatPair, readBufferSize int, reg *prometheus.Registry) (ClientImpl, error)
+	CreateClient(p *BatPair, reg *prometheus.Registry) (ClientImpl, error)
 	LoadBatProfileConfig(profileMap map[string]map[string]string) error
 }
 
