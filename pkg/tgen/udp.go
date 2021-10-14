@@ -151,8 +151,8 @@ func (c *udpStream) SetupConnection() (connectErr error) {
 		connectErr = err
 		return
 	}
-	// set read buffer size into 512KB
-	err = conn.SetReadBuffer(512 * 1024)
+
+	err = conn.SetReadBuffer(c.conf.socketReadBufSize)
 	if err != nil {
 		connectErr = err
 		return
@@ -498,8 +498,8 @@ func (c *udpStream) redialDestination(force bool) error {
 	if err != nil {
 		return err
 	}
-	// set read buffer size into 512KB
-	err = conn.SetReadBuffer(512 * 1024)
+
+	err = conn.SetReadBuffer(c.conf.socketReadBufSize)
 	if err != nil {
 		return err
 	}
@@ -529,11 +529,12 @@ type udpClient struct {
 }
 
 type config struct {
-	sendRate       int
-	packetSize     int
-	packetTimeout  int
-	redialTimeout  int
-	suspendTraffic bool
+	socketReadBufSize int
+	sendRate          int
+	packetSize        int
+	packetTimeout     int
+	redialTimeout     int
+	suspendTraffic    bool
 }
 
 // CreateClient create client implementation for the given protocol
@@ -574,6 +575,15 @@ func (cm *udpClient) LoadBatProfileConfig(profileMap map[string]map[string]strin
 	}
 	// Parse UDP profile
 	if udpEntry, ok := profileMap[tapp.UDPProtocolStr]; ok {
+		if val, ok := udpEntry["socket-read-buf-size"]; ok {
+			cm.conf.socketReadBufSize, err = cm.parseIntValue(val)
+			if err != nil {
+				return fmt.Errorf("parsing udp-socket-read-buf-size failed: err %v", err)
+			}
+		} else {
+			cm.conf.socketReadBufSize = 512 * 1024
+		}
+
 		if val, ok := udpEntry["send-rate"]; ok {
 			cm.conf.sendRate, err = cm.parseIntValue(val)
 			if err != nil {
@@ -602,7 +612,7 @@ func (cm *udpClient) LoadBatProfileConfig(profileMap map[string]map[string]strin
 			}
 		}
 	}
-	logrus.Infof("udp profiling config: %v", *cm.conf)
+	logrus.Infof("udp client profiling config: %v", *cm.conf)
 	return nil
 }
 

@@ -16,6 +16,7 @@ data:
       suspend-traffic: false
     udp:
       send-rate: 500
+      socket-read-buf-size: 524288
       packet-size: 1000
       packet-timeout: 5
       redial-timeout: 5

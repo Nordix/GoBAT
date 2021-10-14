@@ -18,6 +18,8 @@
 package tapp
 
 import (
+	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"sync"
@@ -46,6 +48,7 @@ const (
 
 type udpServer struct {
 	Server              util.Server
+	conf                *config
 	readBufferSize      int
 	podInfoByteArr      []byte
 	connection          *net.UDPConn
@@ -83,8 +86,8 @@ func (s *udpServer) SetupServerConnection() error {
 	if err != nil {
 		return err
 	}
-	// set read buffer size into 512KB
-	err = connection.SetReadBuffer(512 * 1024)
+
+	err = connection.SetReadBuffer(s.conf.socketReadBufSize)
 	if err != nil {
 		return err
 	}
@@ -219,6 +222,11 @@ func (s *udpServer) TearDownServer() {
 }
 
 type udpProtoServerModule struct {
+	conf *config
+}
+
+type config struct {
+	socketReadBufSize int
 }
 
 // CreateServer creates a new udp echo server
@@ -236,8 +244,34 @@ func (sm *udpProtoServerModule) CreateServer(namespace, podName, nodeName, ipAdd
 
 // LoadBatProfileConfig update udp client with the given profile configuration
 func (sm *udpProtoServerModule) LoadBatProfileConfig(profileMap map[string]map[string]string) error {
-	// no udp config needed for server
+	if profileMap == nil {
+		return errors.New("error parsing the udp profile config map data")
+	}
+	var err error
+
+	// Parse UDP profile
+	if udpEntry, ok := profileMap[UDPProtocolStr]; ok {
+		if val, ok := udpEntry["socket-read-buf-size"]; ok {
+			sm.conf.socketReadBufSize, err = sm.parseIntValue(val)
+			if err != nil {
+				return fmt.Errorf("parsing udp-socket-read-buf-size failed: err %v", err)
+			}
+		} else {
+			sm.conf.socketReadBufSize = 512 * 1024
+		}
+	}
+
+	logrus.Infof("udp server profiling config: %v", *sm.conf)
+
 	return nil
+}
+
+func (sm *udpProtoServerModule) parseIntValue(value string) (int, error) {
+	valueInt, err := strconv.Atoi(value)
+	if err != nil {
+		return -1, err
+	}
+	return valueInt, nil
 }
 
 func (sm *udpProtoServerModule) newUDPServer(namespace, podName, workerName, ipAddress string, readBufferSize int,
@@ -257,9 +291,10 @@ func (sm *udpProtoServerModule) newUDPServer(namespace, podName, workerName, ipA
 	udpServer.podInfoByteArr = podInfoByteArr
 	udpServer.promRegistry = reg
 	udpServer.metrics = make([]prometheus.Collector, 0)
+	udpServer.conf = sm.conf
 	return udpServer
 }
 
 func init() {
-	tgc.RegisterProtocolServer(UDPProtocolStr, &udpProtoServerModule{})
+	tgc.RegisterProtocolServer(UDPProtocolStr, &udpProtoServerModule{&config{}})
 }
